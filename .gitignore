@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+*.sqlite3
+*.db
+*.log
+
+# Umgebung
+venv/
+.env
+logs/
+
+# VS Code
+.vscode/
+
+# PyInstaller Builds
+build/
+dist/
+*.spec
+
+# System
+.DS_Store
+Thumbs.db
