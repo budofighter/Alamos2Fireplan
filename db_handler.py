@@ -29,9 +29,17 @@ class DBHandler:
             "house": "TEXT",
             "postal_code": "TEXT",
             "city": "TEXT",
+            "city_abbr": "TEXT", 
             "units": "TEXT",
             "vehicles": "TEXT",
             "alarmed_time": "TEXT",
+            "coordinate": "TEXT",
+            "custom_comment": "TEXT",
+            "custom_diagnosis": "TEXT",
+            "custom_alerted": "TEXT",
+            "custom_alerted_semicolon": "TEXT",
+            "custom_alerted_codes": "TEXT",
+            "custom_alarm_state": "TEXT",
             "raw_json": "TEXT"
         }
 
@@ -44,6 +52,7 @@ class DBHandler:
                 logger.info(f"[DB] Neue Spalte hinzugefügt: {column} ({column_type})")
 
         self.conn.commit()
+
 
     def _ensure_status_table(self):
         self.cursor.execute('''
@@ -62,9 +71,13 @@ class DBHandler:
             self.cursor.execute('''
                 INSERT INTO alarme (
                     timestamp, external_id, keyword, keyword_description, message,
-                    building, street, house, postal_code, city,
-                    units, vehicles, alarmed_time, raw_json
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    building, street, house, postal_code, city, city_abbr,
+                    units, vehicles, alarmed_time,
+                    coordinate,
+                    custom_comment, custom_diagnosis, custom_alerted, custom_alerted_semicolon,
+                    custom_alerted_codes, custom_alarm_state,
+                    raw_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ''', (
                 alarm_data.get("timestamp"),
                 alarm_data.get("externalId"),
@@ -76,15 +89,24 @@ class DBHandler:
                 alarm_data.get("house"),
                 alarm_data.get("postalCode"),
                 alarm_data.get("city"),
+                alarm_data.get("city_abbr"),
                 alarm_data.get("units"),
                 alarm_data.get("vehicles"),
                 alarm_data.get("alarmedTime"),
+                alarm_data.get("coordinate"),
+                alarm_data.get("custom_comment"),
+                alarm_data.get("custom_diagnosis"),
+                alarm_data.get("custom_alerted"),
+                alarm_data.get("custom_alerted_semicolon"),
+                alarm_data.get("custom_alerted_codes"),
+                alarm_data.get("custom_alarm_state"),
                 json.dumps(alarm_data, ensure_ascii=False)
             ))
             self.conn.commit()
             logger.info(f"[DB] Alarm gespeichert: {alarm_data.get('externalId')}")
         except Exception as e:
             logger.error(f"[DB] Fehler beim Speichern des Alarms: {e}")
+
 
     def log_fahrzeugstatus(self, timestamp, fahrzeug, status):
         try:
