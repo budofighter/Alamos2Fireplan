@@ -8,7 +8,7 @@ import paho.mqtt.client as mqtt
 import json
 import re
 import sys
-from tkinter import PhotoImage
+from tkinter import ttk
 from datetime import datetime
 
 from config import MQTT_BROKER, MQTT_PORT, MQTT_TOPIC, MQTT_USERNAME, MQTT_PASSWORD, APP_VERSION, MQTT_STATUS_TOPIC
@@ -37,6 +37,30 @@ def resource_path(relative_path):
 
     return os.path.join(base_path, relative_path)
 
+# === RIC-MAPPING ===
+def load_ric_map(path="ric_map.json"):
+    if not os.path.exists(path):
+        logger.info("[RIC MAP] Keine Datei gefunden – lege leere ric_map.json an.")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump({}, f, indent=2)
+        return {}
+
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        logger.error(f"[RIC MAP] Fehler beim Laden: {e}")
+        return {}
+
+
+def save_ric_map(mapping, path="ric_map.json"):
+    try:
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(mapping, f, indent=2, ensure_ascii=False)
+        logger.info("[RIC MAP] RIC-Zuordnungen gespeichert.")
+    except Exception as e:
+        logger.error(f"[RIC MAP] Fehler beim Speichern: {e}")
+
 
 # === ALARMHANDLING ===
 def handle_alarm(data):
@@ -47,6 +71,19 @@ def handle_alarm(data):
 
         d = data.get("data", {})
         loc = d.get("location", {})
+        custom = d.get("custom", {})
+
+        alarmed_vehicles = d.get("vehicles", [])
+        # Versuche alarmedTime aus dem ersten Fahrzeug zu holen (falls vorhanden)
+        alarmed_time = None
+        if alarmed_vehicles:
+            try:
+                raw_time = alarmed_vehicles[0].get("alarmedTime")
+                # Konvertiere von Millisekunden-Timestamp zu ISO
+                if raw_time:
+                    alarmed_time = datetime.fromtimestamp(int(str(raw_time)[:10])).isoformat()
+            except Exception as e:
+                logger.warning(f"Fehler beim Verarbeiten der alarmedTime: {e}")
 
         alarm_data = {
             "timestamp": data.get("timestamp"),
@@ -59,32 +96,90 @@ def handle_alarm(data):
             "house": loc.get("house"),
             "postalCode": loc.get("postalCode"),
             "city": loc.get("city"),
+            "city_abbr": loc.get("city_abbr"), 
             "units": ", ".join([u.get("address", "") for u in d.get("units", [])]) if d.get("units") else None,
-            "vehicles": json.dumps(d.get("vehicles", []), ensure_ascii=False) if d.get("vehicles") else None,
-            "alarmedTime": str(d.get("vehicles", [{}])[0].get("alarmedTime")) if d.get("vehicles") else None
+            "vehicles": json.dumps(alarmed_vehicles, ensure_ascii=False),
+            "alarmedTime": alarmed_time,
+            "coordinate": json.dumps(loc.get("coordinate"), ensure_ascii=False) if loc.get("coordinate") else None,
+            "custom_comment": custom.get("COBRA_comment"),
+            "custom_diagnosis": custom.get("COBRA_keyword_diagnosis"),
+            "custom_alerted": custom.get("COBRA_DEVICE_alerted"),
+            "custom_alerted_semicolon": custom.get("COBRA_DEVICE_alerted_semicolon"),
+            "custom_alerted_codes": custom.get("COBRA_DEVICE_alerted_codes"),
+            "custom_alarm_state": custom.get("alarmState"),
+            "raw_json": json.dumps(data, ensure_ascii=False)
         }
 
         db.log_alarm(alarm_data)
         logger.info(f"Alarm verarbeitet: {alarm_data}")
-        fp.alarm(build_fireplan_payload(data))
+        payload = build_fireplan_payload(data)
+        ric_list = payload["ric"].split(";")
+
+        for ric in ric_list:
+            if not ric:
+                continue
+            payload_copy = payload.copy()
+            payload_copy["ric"] = ric
+            logger.info(f"🚨 Sende Alarm für RIC {ric}")
+            fp.alarm(payload_copy)
         update_alarm_list()
 
     except Exception as e:
         logger.error(f"Fehler beim Verarbeiten des Alarms: {e}")
 
+def translate_ise_to_ric(ise_string):
+    mapping_raw = os.getenv("RIC_MAP", "")
+    if not mapping_raw or not ise_string:
+        return ise_string  # Fallback
+
+    mapping = dict(entry.split(":") for entry in mapping_raw.split(",") if ":" in entry)
+    ise_list = [code.strip() for code in ise_string.split(";") if code.strip()]
+    ric_list = [mapping.get(code, code) for code in ise_list]
+
+    logger.debug(f"[RIC] Übersetze ISE zu RIC: {ise_list} → {ric_list}")
+    return ";".join(ric_list)
+
+
 def build_fireplan_payload(alamos_data):
     d = alamos_data.get("data", {})
     loc = d.get("location", {})
+    custom = d.get("custom", {})
+    coord = loc.get("coordinate")
+
+    # RIC-Mapping anwenden
+    ise_codes = custom.get("COBRA_DEVICE_alerted_codes", "")
+    ise_list = ise_codes.split(";")
+    ric_map = load_ric_map()
+    translated_rics = [ric_map[code] for code in ise_list if code in ric_map]
+    ric_string = ";".join(translated_rics)
+
+
+    koord = None
+    if isinstance(coord, (list, tuple)) and len(coord) == 2:
+        koord = f"{coord[1]}, {coord[0]}"
+
+    zusatzinfo_parts = [
+        custom.get("COBRA_comment"),
+        custom.get("COBRA_keyword_diagnosis"),
+        custom.get("COBRA_comment")  # Optional doppelt, falls mehrfach hilfreich
+    ]
+    zusatzinfo = " – ".join(filter(None, zusatzinfo_parts))
+
     return {
-        "einsatzstichwort": d.get("keyword"),
+        "einsatzstichwort": d.get("keyword_description"),   # ✅ Beschreibung statt Code
         "strasse": loc.get("street"),
         "hausnummer": loc.get("house"),
         "ort": loc.get("city"),
+        "ortsteil": custom.get("city_abbr"),
         "objektname": loc.get("building"),
-        "zusatzinfo": " ".join(d.get("message", [])) if d.get("message") else None,
+        "zusatzinfo": zusatzinfo,
         "einsatznrlst": d.get("externalId"),
-        "ortsteil": None, "ric": None, "subRIC": None, "koordinaten": None
+        "koordinaten": koord,
+        "ric": ric_string,
+        "subRIC": "A"
     }
+
+
 
 # === Fahrzeugstatus ===
 def handle_status_message(message):
@@ -182,14 +277,15 @@ def set_log_level():
 # === ALARM LISTE
 def update_alarm_list():
     tree.delete(*tree.get_children())
-    db.cursor.execute("SELECT timestamp, keyword, city FROM alarme ORDER BY id DESC LIMIT 100")
+    db.cursor.execute("SELECT timestamp, keyword, city, street, house FROM alarme ORDER BY id DESC LIMIT 100")
     for row in db.cursor.fetchall():
-        original_ts = row[0]  # z.B. '2025-04-15T16:41:00.123456'
+        original_ts = row[0]
         try:
             display_ts = datetime.fromisoformat(original_ts).strftime('%Y-%m-%d %H:%M:%S')
         except Exception:
             display_ts = original_ts
-        tree.insert("", "end", values=(display_ts, row[1], row[2]), tags=(original_ts,))
+        tree.insert("", "end", values=(display_ts, row[1], row[2], row[3], row[4]), tags=(original_ts,))
+
     if tree.get_children():
         tree.see(tree.get_children()[-1])
 
@@ -209,29 +305,59 @@ def show_alarm_details(event):
 
     win = tk.Toplevel(root)
     win.title("Alarm-Details")
-    win.geometry("500x500")
+    win.geometry("600x600")
     icon_img = tk.PhotoImage(file=resource_path("resources/fwsignet.png"))
     win.iconphoto(False, icon_img)
-
 
     text = tk.Text(win, wrap="word")
     detail_lines = []
 
     for key, value in alarm_dict.items():
-        if key == "vehicles" and value:
+        if not value:
+            continue
+
+        if key == "vehicles":
             try:
                 vehicles = json.loads(value)
                 vehicle_lines = [
                     f"- {v.get('name', '?')} ({v.get('id', '?')}) – {v.get('radioName', '?')} – Alarmzeit: {v.get('alarmedTime')}"
                     for v in vehicles
                 ]
-                detail_lines.append(f"{key}:\n" + "\n".join(vehicle_lines))
+                detail_lines.append("Fahrzeuge:\n" + "\n".join(vehicle_lines))
             except Exception as e:
                 detail_lines.append(f"{key}: [Fehler beim Parsen: {e}]")
+
+        elif key == "coordinate":
+            try:
+                coord = json.loads(value) if isinstance(value, str) else value
+                if isinstance(coord, list) and len(coord) == 2:
+                    detail_lines.append(f"Koordinaten: {coord[1]}, {coord[0]}")
+                else:
+                    detail_lines.append(f"Koordinaten: {value}")
+            except:
+                detail_lines.append(f"Koordinaten: {value}")
+
+        elif key == "custom_alerted_semicolon":
+            lines = value.split(";")
+            detail_lines.append("Alarmierte Einheiten:\n" + "\n".join(f"- {line.strip()}" for line in lines))
+
+        elif key == "raw_json":
+            continue  # wird unten gesondert angezeigt
+
         else:
-            detail_lines.append(f"{key}: {value}")
+            label = key.replace("_", " ").capitalize()
+            detail_lines.append(f"{label}: {value}")
 
     text.insert("1.0", "\n\n".join(detail_lines))
+
+    raw_json = alarm_dict.get("raw_json")
+    if raw_json:
+        try:
+            raw_json_formatted = json.dumps(json.loads(raw_json), indent=2, ensure_ascii=False)
+        except Exception:
+            raw_json_formatted = raw_json
+        text.insert(tk.END, "\n\n🔍 Rohdaten (JSON):\n" + raw_json_formatted)
+
     text.config(state="disabled")
     text.pack(expand=True, fill="both", padx=10, pady=10)
 
@@ -240,12 +366,20 @@ def show_alarm_details(event):
             "data": {
                 "externalId": alarm_dict.get("external_id"),
                 "keyword": alarm_dict.get("keyword"),
+                "keyword_description": alarm_dict.get("keyword_description"),
                 "message": [alarm_dict.get("message")],
                 "location": {
                     "street": alarm_dict.get("street"),
                     "house": alarm_dict.get("house"),
                     "city": alarm_dict.get("city"),
-                    "building": alarm_dict.get("building")
+                    "building": alarm_dict.get("building"),
+                    "coordinate": json.loads(alarm_dict.get("coordinate", "null") or "null")
+                },
+                "custom": {
+                    "COBRA_comment": alarm_dict.get("custom_comment"),
+                    "COBRA_keyword_diagnosis": alarm_dict.get("custom_diagnosis"),
+                    "COBRA_DEVICE_alerted_codes": alarm_dict.get("custom_alerted_codes"),
+                    "alarmState": alarm_dict.get("custom_alarm_state")
                 }
             }
         })
@@ -258,6 +392,8 @@ def show_alarm_details(event):
             messagebox.showerror("Fehler", str(e))
 
     tk.Button(win, text="📨 Erneut senden", command=resend).pack(pady=10)
+
+
 
 
 # === LOG VIEWER
@@ -356,16 +492,28 @@ notebook.add(log_tab, text="📄 Logs")
 notebook.add(settings_tab, text="⚙️ Einstellungen")
 
 # Alarm-Tab
+
 global tree
-tree_columns = ("timestamp", "keyword", "city")
+tree_columns = ("timestamp", "keyword", "city", "street", "house")
 tree = ttk.Treeview(alarm_tab, columns=tree_columns, show="headings")
-for col in tree_columns:
-    tree.heading(col, text=col.title())
+
+# Spaltenüberschriften + Breiten
+tree.heading("timestamp", text="Zeit")
+tree.column("timestamp", width=150, anchor="w")
+tree.heading("keyword", text="Stichwort")
+tree.column("keyword", width=130, anchor="w")
+tree.heading("city", text="Ort")
+tree.column("city", width=100, anchor="w")
+tree.heading("street", text="Straße")
+tree.column("street", width=160, anchor="w")
+tree.heading("house", text="Nr.")
+tree.column("house", width=50, anchor="center")
 tree.pack(fill="both", expand=True)
 tree.bind("<Double-1>", show_alarm_details)
 
 tk.Button(alarm_tab, text="🧹 Alarme löschen", command=lambda: (
     db.cursor.execute("DELETE FROM alarme"), db.conn.commit(), update_alarm_list()), width=25).pack(pady=10)
+
 
 # Status-Tab
 status_table = ttk.Treeview(status_tab, columns=("timestamp", "fahrzeug", "status"), show="headings")
@@ -390,7 +538,7 @@ log_text = tk.Text(log_tab, wrap="none")
 log_text.pack(fill="both", expand=True)
 tk.Button(log_tab, text="🧹 Logs löschen", command=clear_logs, width=25).pack(pady=10)
 
-# Einstellungen-Tab
+# === Einstellungen-Tab (scrollbarfähig) ===
 env_fields = {
     "MQTT_BROKER": tk.StringVar(value=os.getenv("MQTT_BROKER", "")),
     "MQTT_PORT": tk.StringVar(value=os.getenv("MQTT_PORT", "")),
@@ -406,22 +554,47 @@ env_fields = {
     "AUSWERTUNG_FEUERSOFTWARE": tk.BooleanVar(value=os.getenv("AUSWERTUNG_FEUERSOFTWARE", "False") == "True")
 }
 
-form_frame = tk.Frame(settings_tab, padx=20, pady=20)
-form_frame.grid(row=0, column=0, sticky="n")
+# Canvas & Scrollbar
+canvas = tk.Canvas(settings_tab, borderwidth=0, highlightthickness=0, background=settings_tab["background"])
+scrollbar = ttk.Scrollbar(settings_tab, orient="vertical", command=canvas.yview)
+scrollable_frame = ttk.Frame(canvas)
+
+scrollable_frame.bind(
+    "<Configure>",
+    lambda e: canvas.configure(
+        scrollregion=canvas.bbox("all")
+    )
+)
+
+canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+canvas.configure(yscrollcommand=scrollbar.set)
+
+canvas.pack(side="left", fill="both", expand=True)
+scrollbar.pack(side="right", fill="y")
+
+# Optional: Scroll per Mausrad
+def _on_mousewheel(event):
+    canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+# Formular in scrollbarem Bereich
+form_frame = ttk.Frame(scrollable_frame, padding=20)
+form_frame.pack(fill="x", anchor="n")
 
 row = 0
 for key, var in env_fields.items():
-    tk.Label(form_frame, text=key + ":").grid(row=row, column=0, sticky="e", pady=5, padx=5)
+    ttk.Label(form_frame, text=key + ":").grid(row=row, column=0, sticky="e", pady=5, padx=5)
 
     if key == "LOG_LEVEL":
         level_combo = ttk.Combobox(form_frame, textvariable=var, state="readonly", width=37)
         level_combo["values"] = ["DEBUG", "INFO", "WARNING", "ERROR"]
         level_combo.grid(row=row, column=1, pady=5)
     elif key.startswith("AUSWERTUNG_"):
-        tk.Checkbutton(form_frame, variable=var, onvalue=True, offvalue=False).grid(row=row, column=1, sticky="w", pady=5)
+        ttk.Checkbutton(form_frame, variable=var, onvalue=True, offvalue=False).grid(row=row, column=1, sticky="w", pady=5)
     else:
         show_char = "*" if "PASSWORD" in key else ""
-        tk.Entry(form_frame, textvariable=var, width=40, show=show_char).grid(row=row, column=1, pady=5)
+        ttk.Entry(form_frame, textvariable=var, width=40, show=show_char).grid(row=row, column=1, pady=5)
     row += 1
 
 def save_env_from_form():
@@ -436,6 +609,63 @@ tk.Button(
     command=save_env_from_form,
     width=20
 ).grid(row=row, column=0, columnspan=2, pady=15)
+
+# === RIC Mapping Editor ===
+tk.Label(scrollable_frame, text="🔁 ISE - RIC Zuordnung", font=("Segoe UI", 10, "bold")).pack(anchor="w", padx=20, pady=(30, 5))
+ttk.Button(scrollable_frame, text="📝 Zuordnung bearbeiten", command=lambda: open_ric_editor(), width=30).pack(pady=10, padx=20, anchor="w")
+
+def open_ric_editor():
+    win = tk.Toplevel(root)
+    win.title("ISE:RIC-Zuordnung bearbeiten")
+    win.geometry("500x500")
+    win.resizable(False, False)
+
+    tk.Label(win, text="🔧 Trage hier die ISE:RIC-Zuordnungen ein (eine pro Zeile)", font=("Segoe UI", 10, "bold")).pack(pady=(10, 5))
+
+    example = "Beispiel:\nise1234sys00abcde12300:0123456\nise1234sys00xyz00xyz00:0654321"
+    tk.Label(win, text=example, font=("Segoe UI", 9, "italic"), fg="gray").pack(pady=(0, 10))
+
+    text_frame = tk.Frame(win)
+    text_frame.pack(fill="both", expand=True, padx=10)
+
+    text_widget = tk.Text(text_frame, height=18, width=60)
+    text_widget.pack(fill="both", expand=True)
+
+    # Vorhandene Einträge laden
+    ric_mapping = load_ric_map()
+    lines = [f"{ise}:{ric}" for ise, ric in ric_mapping.items()]
+    text_widget.insert("1.0", "\n".join(lines))
+
+    def save():
+        raw = text_widget.get("1.0", tk.END).strip()
+        new_map = {}
+        errors = []
+
+        for i, line in enumerate(raw.splitlines(), start=1):
+            if ":" not in line:
+                continue
+            ise, ric = map(str.strip, line.split(":", 1))
+
+            if not ise.startswith("ise"):
+                errors.append(f"Zeile {i}: Ungültiger ISE-Code ({ise})")
+            if not (ric.isdigit() and len(ric) == 7):
+                errors.append(f"Zeile {i}: RIC muss 7 Ziffern sein ({ric})")
+
+            new_map[ise] = ric
+
+        if errors:
+            messagebox.showerror("Fehler", "\n".join(errors), parent=win)
+            return
+
+        save_ric_map(new_map)
+        messagebox.showinfo("Gespeichert", "RIC-Zuordnung gespeichert ✅", parent=win)
+        save_btn.config(text="✅ Gespeichert", state="disabled")
+        win.after(1000, win.destroy)
+
+    save_btn = tk.Button(win, text="💾 Speichern & Schließen", command=save)
+    save_btn.pack(pady=10)
+
+
 
 # Branding
 branding.columnconfigure(1, weight=1)
