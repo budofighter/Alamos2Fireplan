@@ -2,6 +2,7 @@ import requests
 import cerberus
 import sys
 import os
+import json
 import pytz
 from datetime import datetime
 from urllib.parse import quote
@@ -74,22 +75,37 @@ class Fireplan:
         url = f"{self.BASE_URL}Alarmierung"
         headers = self.headers
 
+        data["koordinaten"] = self._format_coordinates(data.get("koordinaten"))
+
+        # Nur gültige Felder behalten
+        valid = self.validator.validated(data)
+
+        if not valid:
+            logger.error("[Fireplan] Ungültige Alarmdaten – Validierung fehlgeschlagen:")
+            logger.error(self.validator.errors)
+            return
+        else:
+            logger.debug("[Fireplan] Alarmdaten erfolgreich validiert.")
+            logger.debug(f"[Fireplan] Validierte Payload:\n{json.dumps(valid, indent=2, ensure_ascii=False)}")
+
+
         try:
-            response = requests.post(url, headers=headers, json=data)
+            logger.debug(f"[Fireplan] Sende Alarmdaten an Fireplan:\n{json.dumps(valid, indent=2, ensure_ascii=False)}")
+            response = requests.post(url, headers=headers, json=valid)
 
             if response.status_code == 200:
-                logger.info("Neue Alarmmeldung an Fireplan gesendet.")
+                logger.info("✅ Alarm erfolgreich an Fireplan übermittelt.")
                 if "SUCCESS" in response.text:
-                    logger.info(f"Alarm erfolgreich angelegt. Antwort: {response.text}")
+                    logger.info(f"[Fireplan] Antwort: {response.text}")
                 else:
-                    logger.warning(f"Alarm NICHT angelegt. Antwort: {response.text}")
+                    logger.warning(f"[Fireplan] Antwort enthält kein 'SUCCESS': {response.text}")
             else:
-                logger.error(f"Fehler beim Senden des Alarms. Code: {response.status_code}")
+                logger.error(f"❌ Fehler beim Senden des Alarms an Fireplan (HTTP {response.status_code})")
                 logger.error(response.text)
 
-            logger.debug(f"Gesendete Daten: {data}")
         except Exception as e:
-            logger.error(f"Fehler beim Senden des Alarms an Fireplan: {e}")
+            logger.error(f"[Fireplan] Ausnahme beim Senden des Alarms: {e}")
+
 
     def send_fms_status(self, kennung, status, timestamp=None):
         url = f"{self.BASE_URL}FMSStatus"
@@ -132,3 +148,12 @@ class Fireplan:
 
         except Exception as e:
             logger.error(f"[Fireplan] Fehler bei FMS-Statusmeldung: {e}")
+
+
+    def _format_coordinates(self, coord_raw):
+        if isinstance(coord_raw, (list, tuple)) and len(coord_raw) == 2:
+            return f"{coord_raw[1]}, {coord_raw[0]}"
+        if isinstance(coord_raw, str):
+            return coord_raw
+        return None
+
