@@ -16,15 +16,15 @@
 1. **ZIP-Datei herunterladen und entpacken**  
    Die ZIP enthält:
 
-   - `Alamos2Fireplan.exe` → Das Hauptprogramm (ausführbare Datei)
-   - `_internal/` → Notwendige Python-Dateien für die Ausführung
-   - `logs/, .env, ric_map.json und alarme.db` → werden beim ersten Start erstellt
+   - `Alamos2Fireplan.exe` → Das Hauptprogramm
+   - `_internal/` → Notwendige Programmbibliotheken
+   - `logs/`, `.env`, `ric_map.json`, `alarme.db` → werden beim ersten Start automatisch erstellt
 
-2. **Starten**  
-   Starte das Programm mit einem Doppelklick auf:
-    Alamos2Fireplan.exe
+2. **Programm starten**  
+   Doppelklick auf:
+   Alamos2Fireplan.exe
 
-
+   
 ---
 
 ## ⚙️ Erste Schritte
@@ -33,127 +33,139 @@
 
 2. Trage folgende Felder ein:
 
-- `MQTT_BROKER` – z. B. `127.0.0.1` 
+- `MQTT_BROKER` – z. B. `127.0.0.1`  
 - `MQTT_PORT` – meist `1883`
-- `MQTT_TOPIC` – z. B. `alamos/alarm/json` → definiert in Alamos
-- `MQTT_USERNAME` / `MQTT_PASSWORD` → aus der Mosquitto-Einrichtung
+- `MQTT_TOPIC` – z. B. `alamos/alarm/json` (entsprechend deiner Alamos-Konfiguration)
+- `MQTT_USERNAME` / `MQTT_PASSWORD` – falls dein MQTT-Broker geschützt ist
 
 3. Weiter unten:
 
 - `FIREPLAN_SECRET` – dein API-Key
-- `FIREPLAN_DIVISION` – Abteilungsname der Fireplan API
-- Optional: `FEUERSOFTWARE_API_TOKEN`
-- Optional: Nur für Expertenbenutzer - Externe API für eigene Weiterverarbeitung der Fahrzeugstatus:
+- `FIREPLAN_DIVISION` – Abteilungsname für Fireplan
+- *(Optional)* `FEUERSOFTWARE_API_TOKEN`
+- *(Optional – für Experten)* Eigene API für Status-Weiterverarbeitung:
   - `EXTERNE_API_URL` – z. B. `https://status.fwbs.de/api.php`
-  - `EXTERNE_API_TOKEN` – API-Schlüssel für Statusübertragung
+  - `EXTERNE_API_TOKEN` – API-Schlüssel für die Übertragung
 
-4. Änderungen mit dem Button **💾 Speichern** sichern  
-→ Die Datei `.env` wird automatisch angepasst
+4. Klicke auf **💾 Speichern**  
+➤ Die `.env` wird automatisch aktualisiert.
 
 ---
 
-## 🔁 ISE → RIC-Zuordnung
+## 🔁 ISE → RIC Zuordnung
 
-Damit dein System weiß, welcher ISE-Code zu welchem RIC gehört:
-
-1. Gehe im Tab **„Einstellungen“** ganz runter zum Abschnitt  
-**🔁 ISE - RIC Zuordnung**
+1. Scrolle im Tab **„⚙️ Einstellungen“** ganz nach unten  
+➤ Bereich **🔁 ISE - RIC Zuordnung**
 
 2. Klicke auf **📝 Zuordnung bearbeiten**
 
-3. Trage je Zeile ein:
-ise1234sys00abcde12300:123456
+3. Gib je Zeile eine Zuordnung ein, z. B.:
+ise1234sys00abcde12300:1234567
 
-➤ Nur gültige RICs (7-stellig, numerisch) werden gespeichert
-➤ Die ise-Werte bekommt ihr aus dem Alamos System und bezeichnet die eindeutige RIC-Zuordnung im Leitstellenrechner
 
-4. Speichern & Schließen – fertig ✅
+- ➤ Nur gültige RICs (7-stellig, numerisch) werden gespeichert
+- ➤ Die ISE-Werte stammen aus dem Alamos-System und entsprechen der eindeutigen Zuordnung in der Leitstelle
+
+4. Klicke auf **💾 Speichern & Schließen**
 
 ---
 
-## ⚙️ Nötige EInstellungen in Alamos (Quelle), Fireplan (Ziel) und Feuersoftware (Ziel)
+## ⚙️ Konfiguration von Alamos, Fireplan & Feuersoftware
 
-➤ Alamos:
-Es müssen zwei Einheiten angelegt werden Alarmeinheit für die Alarme und eine Statuseinheit für die Fahrzeugstati. 
-1. Der Alarmablauf der Alarmeinheit muss folgenden Aufbau haben:
-→ JSON-Plugin
-   - Modud: JSON in Alarmtext schreiben
-   - Version: v2
-   - zusätzlicche Parameter:
-      alarmState
-      city_abbr
-      COBRA_DEVICE_alerted_codes
-      COBRA_DEVICE_alerted
-      COBRA_DEVICE_alerted_semicolon
-      COBRA_keyword_diagnosis
-      COBRA_comment
-   
-     → MQTT
-        - Broker, Benutezrname und Passwort: siehe Einrichtung Mosquitto
-        - Topic: muss mit der Einstellung in Alamos2Fireplan übereinstimmen
+### 🔸 Alamos
 
+> Zwei Einheiten erforderlich: **Alarmeinheit** & **Statuseinheit**
 
-2. Der Alarmablauf der Statuseinheit muss folgenden Aufbau haben:
-→ JSON-Plugin
-   - Modud: JSON in Alarmtext schreiben
-   - Version: v2
-   
-     → MQTT
-        - Broker, Benutezrname und Passwort: siehe Einrichtung Mosquitto
-        - Topic: muss mit der Einstellung in Alamos2Fireplan übereinstimmen
-    
-➤ Fireplan:
-1. Die RICs in den Optionen müssen mit den RICs aus der 🔁 ISE - RIC Zuordnung übereinstimmen. Inkl. ggf. führender 0. !Achtung! es werden nur A-SubRICS übergeben.
-2. Die Fahrzeuge in den Optionen müssen als FMS-Kennung den exakten Aufbau aus Alamos haben. (z.B. FL-BAS 1/10) - ggf. müssen Fahrzeuge ausgeblendet und neu angelegt werden.
+#### 1. Alarmeinheit
+- **JSON-Plugin**
+- Modul: *JSON in Alarmtext schreiben*
+- Version: `v2`
+- Zusätzliche Parameter:
+ - `alarmState`
+ - `city_abbr`
+ - `COBRA_DEVICE_alerted_codes`
+ - `COBRA_DEVICE_alerted`
+ - `COBRA_DEVICE_alerted_semicolon`
+ - `COBRA_keyword_diagnosis`
+ - `COBRA_comment`
+- **MQTT-Plugin**
+- Broker, Username, Passwort gemäß deiner Mosquitto-Konfiguration
+- Topic muss mit `MQTT_TOPIC` in Alamos2Fireplan übereinstimmen
 
- ➤ Feuersoftware:
- 1. Die Fahrzeuge in den Optionen müssen als FMS-Kennung eine bereinigte Form haben, da diese per URL übergeben werden. (z.B. FLBAS 110).
+#### 2. Statuseinheit
+- **JSON-Plugin**
+- Modul: *JSON in Alarmtext schreiben*
+- Version: `v2`
+- **MQTT-Plugin**
+- Gleich wie oben
 
-## 🔍 Funktionen im Überblick
+---
+
+### 🔸 Fireplan
+
+- RICs müssen exakt mit den RICs aus der **ISE-Zuordnung** übereinstimmen  
+➤ *Führende Nullen beachten*  
+➤ Es werden nur **A-SubRICs** übergeben
+
+- Fahrzeuge benötigen eine exakte FMS-Kennung, z. B.:  
+`FL-BAS 1/10`  
+➤ Ggf. alte Fahrzeuge ausblenden und neu anlegen
+
+---
+
+### 🔸 Feuersoftware
+
+- Die FMS-Kennung muss **bereinigt** übergeben werden (für die URL):  
+➤ z. B.: `FLBAS110`
+
+---
+
+## 🔍 Funktionsübersicht
 
 | System            | Funktion                                                              |
 |-------------------|-----------------------------------------------------------------------|
-| **MQTT**          | Empfang von Alarmmeldungen im JSON-Format                             |
-| **Fireplan**      | Automatische Einsatz- und Fahrzeugstatus-POSTs mit Koordinaten & RICs |
-| **Feuersoftware** | Automatische Fahrzeugstatus-POSTs mit Koordinaten & RICs              |
-| **Externe API**   | Übergibt Fahrzeugstatusmeldungen an externe API (z. B. Status 1–8)    |
+| **MQTT**          | Empfang von Alarm- und Statusmeldungen im JSON-Format                 |
+| **Fireplan**      | Automatische Einsatz-POSTs inkl. Koordinaten und RIC                 |
+| **Feuersoftware** | Übergibt Fahrzeugstatus automatisch über REST-API                    |
+| **Externe API**   | Übergibt Fahrzeugstatus an benutzerdefinierte API-Schnittstellen     |
 
 ---
 
 ## 🧪 Test & Logs
 
 - Logdatei: `logs/app.log`
-- Alarme & Statusmeldungen werden lokal in einer SQLite-Datenbank gespeichert
-- Im Tab ** EInsätze** kannst du auf einen EInsatz Doppelklickenm, um weitere Details einzusehen und den Alarm neu zu senden
-- Im Tab **„📄 Logs“** kannst du die Log-Datei einsehen oder löschen
-- Die Logdetails können in den EInstellungen umgestellt werden
+- Lokale Datenbank: `alarme.db` (SQLite-basiert)
+- Tab **„📟 Einsätze“** → Doppelklick für Details & erneutes Senden
+- Tab **„📄 Logs“** → Log einsehen oder löschen
+- Log-Level über die Einstellungen konfigurierbar
 
 ---
 
 ## 🖼 GUI-Vorschau
 
-![GUI Screenshot](./resources/screenshot.png)  
-_Füge bei Bedarf eigene Screenshots hinzu_
+![GUI Screenshot 1](./resources/Screenshot1.png)  
+![GUI Screenshot 2](./resources/Screenshot2.png)  
+![GUI Screenshot 3](./resources/Screenshot3.png)
 
 ---
 
-## 🧹 Tipps
+## 🧹 Tipps & Tricks
 
-- Wenn du Probleme hast, kannst du `.env` und `ric_map.json` löschen – sie werden neu erstellt
-- Die Datenbankdateien (`alarme.db`) kannst du mit einem SQLite-Viewer einsehen
+- `.env` oder `ric_map.json` gelöscht? ➤ Werden automatisch neu erstellt
+- Datenbank `alarme.db` kann mit jedem SQLite-Viewer geöffnet werden
+- Das Programm läuft portabel – auch vom USB-Stick
 
 ---
 
-## 🧑‍💻 Entwickler
+## 👨‍💻 Entwickler
 
-Quellcode & Issues:  
-**https://github.com/budofighter/Alamos2Fireplan**
+📦 GitHub Repository & Quellcode:  
+**[https://github.com/budofighter/Alamos2Fireplan](https://github.com/budofighter/Alamos2Fireplan)**
 
 ---
 
 ## 📜 Lizenz
 
 MIT License  
-© Christian Siebold
-
+© 2025 Christian Siebold
 
