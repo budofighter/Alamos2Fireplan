@@ -32,16 +32,12 @@
 ```conf
 # mosquitto.conf – minimale Konfiguration
 
-listener 1883
 allow_anonymous false
-password_file C:\Program Files\mosquitto\passwd.txt
-persistence true
-persistence_location C:\Program Files\mosquitto\data\
-log_dest file C:\Program Files\mosquitto\mosquitto.log
+password_file C:\Users\BENUTZER\Documents\pwfile.txt
+listener 1883
 ```
-
 🔒 Diese Konfiguration deaktiviert anonymen Zugriff und sichert den Zugang mit einem Passwort.
-
+❗Achtung! der Pfad darf kein Leerzeichen enthalten (wie z.B. in `C:\Program Files\mosquitto`), daher muss die Datei ggf. an einen anderen Ort kopiert werden.
 ---
 
 ## 🔑 3. Benutzer für MQTT-Zugriff anlegen
