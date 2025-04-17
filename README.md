@@ -79,28 +79,28 @@ ise1234sys00abcde12300:1234567
 
 #### 1. Alarmeinheit
  → **JSON-Plugin**
-   Modul: *JSON in Alarmtext schreiben*
-   Version: `v2`
-   Zusätzliche Parameter:
-   `alarmState`
-   `city_abbr`
-   `COBRA_DEVICE_alerted_codes`
-   `COBRA_DEVICE_alerted`
-   `COBRA_DEVICE_alerted_semicolon`
-   `COBRA_keyword_diagnosis`
-   `COBRA_comment`
+   - Modul: *JSON in Alarmtext schreiben*
+   - Version: `v2`
+   - Zusätzliche Parameter:
+   - `alarmState`
+   - `city_abbr`
+   - `COBRA_DEVICE_alerted_codes`
+   - `COBRA_DEVICE_alerted`
+   - `COBRA_DEVICE_alerted_semicolon`
+   - `COBRA_keyword_diagnosis`
+   - `COBRA_comment`
    
    →→ **MQTT-Plugin**
-       Broker, Username, Passwort gemäß deiner Mosquitto-Konfiguration
-       Topic muss mit `MQTT_TOPIC` in Alamos2Fireplan übereinstimmen
+          - Broker, Username, Passwort gemäß deiner Mosquitto-Konfiguration
+          - Topic muss mit `MQTT_TOPIC` in Alamos2Fireplan übereinstimmen
 
 #### 2. Statuseinheit
 → **JSON-Plugin**
-  Modul: *JSON in Alarmtext schreiben*
-  Version: `v2`
+  - Modul: *JSON in Alarmtext schreiben*
+  - Version: `v2`
 
   →→ **MQTT-Plugin**
-     Gleich wie oben
+        - Gleich wie oben
 
 ---
 
