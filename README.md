@@ -7,7 +7,8 @@
 
 ## 🛠 Voraussetzungen
 
-- ✅ Ein **lokaler oder externer MQTT-Broker** (z. B. [Mosquitto](https://mosquitto.org/)) muss auf dem Zielsystem oder im Netzwerk installiert und konfiguriert sein.
+Einen funktionierenden MQTT-Broker, welcher die Daten von Alamos empfangen kann.
+➡ [📘 Anleitung zur Einrichtung von Mosquitto (MQTT-Broker)](MOSQUITTO_SETUP.md)
 
 ---
 
@@ -88,16 +89,18 @@ ise1234sys00abcde12300:1234567
  - `COBRA_DEVICE_alerted_semicolon`
  - `COBRA_keyword_diagnosis`
  - `COBRA_comment`
-- **MQTT-Plugin**
-- Broker, Username, Passwort gemäß deiner Mosquitto-Konfiguration
-- Topic muss mit `MQTT_TOPIC` in Alamos2Fireplan übereinstimmen
+   
+   -- **MQTT-Plugin**
+   -- Broker, Username, Passwort gemäß deiner Mosquitto-Konfiguration
+   -- Topic muss mit `MQTT_TOPIC` in Alamos2Fireplan übereinstimmen
 
 #### 2. Statuseinheit
 - **JSON-Plugin**
 - Modul: *JSON in Alarmtext schreiben*
 - Version: `v2`
-- **MQTT-Plugin**
-- Gleich wie oben
+
+  -- **MQTT-Plugin**
+  -- Gleich wie oben
 
 ---
 
@@ -115,19 +118,8 @@ ise1234sys00abcde12300:1234567
 
 ### 🔸 Feuersoftware
 
-- Die FMS-Kennung muss **bereinigt** übergeben werden (für die URL):  
+- Die FMS-Kennung muss **bereinigt** übergeben werden (da per URL übergeben):  
 ➤ z. B.: `FLBAS110`
-
----
-
-## 🔍 Funktionsübersicht
-
-| System            | Funktion                                                              |
-|-------------------|-----------------------------------------------------------------------|
-| **MQTT**          | Empfang von Alarm- und Statusmeldungen im JSON-Format                 |
-| **Fireplan**      | Automatische Einsatz-POSTs inkl. Koordinaten und RIC                 |
-| **Feuersoftware** | Übergibt Fahrzeugstatus automatisch über REST-API                    |
-| **Externe API**   | Übergibt Fahrzeugstatus an benutzerdefinierte API-Schnittstellen     |
 
 ---
 
@@ -138,6 +130,7 @@ ise1234sys00abcde12300:1234567
 - Tab **„📟 Einsätze“** → Doppelklick für Details & erneutes Senden
 - Tab **„📄 Logs“** → Log einsehen oder löschen
 - Log-Level über die Einstellungen konfigurierbar
+- Über das Tool MQTT-Explorer [MQTT-Explorer](https://mqtt-explorer.com/) kann sehr einfach die MQTT Meldungen überwacht werden, falls es zu einem Problem kommt.
 
 ---
 
@@ -146,14 +139,6 @@ ise1234sys00abcde12300:1234567
 ![GUI Screenshot 1](./resources/Screenshot1.png)  
 ![GUI Screenshot 2](./resources/Screenshot2.png)  
 ![GUI Screenshot 3](./resources/Screenshot3.png)
-
----
-
-## 🧹 Tipps & Tricks
-
-- `.env` oder `ric_map.json` gelöscht? ➤ Werden automatisch neu erstellt
-- Datenbank `alarme.db` kann mit jedem SQLite-Viewer geöffnet werden
-- Das Programm läuft portabel – auch vom USB-Stick
 
 ---
 
