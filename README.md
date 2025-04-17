@@ -138,7 +138,6 @@ ise1234sys00abcde12300:1234567
 
 ![GUI Screenshot 1](./resources/Screenshot1.png)  
 ![GUI Screenshot 2](./resources/Screenshot2.png)  
-![GUI Screenshot 3](./resources/Screenshot3.png)
 
 ---
 
