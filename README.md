@@ -5,7 +5,7 @@
 
 ---
 
-## 🛠 Voraussetzungen
+## Voraussetzungen
 
 Einen funktionierenden MQTT-Broker, welcher die Daten von Alamos empfangen kann.
 
@@ -13,21 +13,21 @@ Einen funktionierenden MQTT-Broker, welcher die Daten von Alamos empfangen kann.
 
 ---
 
-## 💾 Installationsanleitung
+## Installationsanleitung
 ➡ [Installationsanleitung](https://github.com/budofighter/Alamos2Fireplan/wiki/Installationsanleitung)
 
 ---
 
-## ⚙️ Konfiguration von Alamos, Fireplan & Feuersoftware
+## Konfiguration von Alamos, Fireplan & Feuersoftware
 ➡ [Konfiguration](https://github.com/budofighter/Alamos2Fireplan/wiki/Konfiguration)
 
 ---
 
-## 🔝 Updates
+## Updates
 ➡ [Updates](https://github.com/budofighter/Alamos2Fireplan/wiki/Updates)
 
 ---
-## 🧪 Test & Logs & Konfigurationsdateien
+## Test & Logs & Konfigurationsdateien
 
 - Logdatei: `logs/app.log`
 - Lokale Datenbank: `alarme.db` (SQLite-basiert)
@@ -39,21 +39,21 @@ Einen funktionierenden MQTT-Broker, welcher die Daten von Alamos empfangen kann.
 
 ---
 
-## 🖼 GUI-Vorschau
+## GUI-Vorschau
 
 ![GUI Screenshot 1](./resources/Screenshot1.png)  
 ![GUI Screenshot 2](./resources/Screenshot2.png)  
 
 ---
 
-## 👨‍💻 Entwickler
+## Entwickler
 
 📦 GitHub Repository & Quellcode:  
 **[https://github.com/budofighter/Alamos2Fireplan](https://github.com/budofighter/Alamos2Fireplan)**
 
 ---
 
-## 📜 Lizenz
+## Lizenz
 
 MIT License  
 © 2025 Christian Siebold
