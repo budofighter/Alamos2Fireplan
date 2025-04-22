@@ -4,19 +4,20 @@ import logging
 import threading
 import webbrowser
 import os
-import paho.mqtt.client as mqtt
 import json
 import re
 import sys
 from tkinter import ttk
+import subprocess  
 from datetime import datetime
+from extern_api import post_externer_status
 
-from config import MQTT_BROKER, MQTT_PORT, MQTT_TOPIC, MQTT_USERNAME, MQTT_PASSWORD, APP_VERSION, MQTT_STATUS_TOPIC
+from config import MQTT_BROKER, MQTT_PORT, MQTT_TOPIC, MQTT_USERNAME, MQTT_PASSWORD, APP_VERSION, MQTT_STATUS_TOPIC, EXTERNE_API_URL, EXTERNE_API_TOKEN
 from mqtt_handler import MQTTHandler
 from db_handler import DBHandler
 from fireplan_api import Fireplan
 from log_helper import logger
-from feuersoftware_api import post_fahrzeug_status
+from feuersoftware_api import post_fahrzeug_status, post_feuersoftware_alarm
 
 from dotenv import set_key, load_dotenv
 
@@ -37,8 +38,10 @@ def resource_path(relative_path):
 
     return os.path.join(base_path, relative_path)
 
+os.makedirs("config", exist_ok=True)
+
 # === RIC-MAPPING ===
-def load_ric_map(path="ric_map.json"):
+def load_ric_map(path=os.path.join("config", "ric_map.json")):
     if not os.path.exists(path):
         logger.info("[RIC MAP] Keine Datei gefunden – lege leere ric_map.json an.")
         with open(path, "w", encoding="utf-8") as f:
@@ -53,7 +56,7 @@ def load_ric_map(path="ric_map.json"):
         return {}
 
 
-def save_ric_map(mapping, path="ric_map.json"):
+def save_ric_map(mapping, path=os.path.join("config", "ric_map.json")):
     try:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(mapping, f, indent=2, ensure_ascii=False)
@@ -74,17 +77,16 @@ def handle_alarm(data):
         custom = d.get("custom", {})
 
         alarmed_vehicles = d.get("vehicles", [])
-        # Versuche alarmedTime aus dem ersten Fahrzeug zu holen (falls vorhanden)
         alarmed_time = None
         if alarmed_vehicles:
             try:
                 raw_time = alarmed_vehicles[0].get("alarmedTime")
-                # Konvertiere von Millisekunden-Timestamp zu ISO
                 if raw_time:
                     alarmed_time = datetime.fromtimestamp(int(str(raw_time)[:10])).isoformat()
             except Exception as e:
                 logger.warning(f"Fehler beim Verarbeiten der alarmedTime: {e}")
 
+        # === Alarm speichern in DB ===
         alarm_data = {
             "timestamp": data.get("timestamp"),
             "externalId": d.get("externalId"),
@@ -110,19 +112,42 @@ def handle_alarm(data):
             "raw_json": json.dumps(data, ensure_ascii=False)
         }
 
-        db.log_alarm(alarm_data)
-        logger.info(f"Alarm verarbeitet: {alarm_data}")
-        payload = build_fireplan_payload(data)
-        ric_list = payload["ric"].split(";")
+        try:
+            db.log_alarm(alarm_data)
+            update_alarm_list()
+            logger.info(f"📥 Alarm gespeichert: {alarm_data.get('keyword_description')} ({alarm_data.get('externalId')})")
+        except Exception as e:
+            logger.error(f"[DB] Fehler beim Speichern des Alarms: {e}")
 
-        for ric in ric_list:
-            if not ric:
-                continue
-            payload_copy = payload.copy()
-            payload_copy["ric"] = ric
-            logger.info(f"🚨 Sende Alarm für RIC {ric}")
-            fp.alarm(payload_copy)
-        update_alarm_list()
+        # === Payload für Fireplan vorbereiten
+        payload = build_fireplan_payload(data)
+        ric_list = [r for r in payload.get("ric", "").split(";") if r.strip()]
+
+        # === Fireplan Alarm
+        if os.getenv("AUSWERTUNG_FIREPLAN", "False") == "True":
+            for ric in ric_list:
+                if not ric:
+                    continue
+                payload_copy = payload.copy()
+                payload_copy["ric"] = ric
+                logger.info(f"🚨 Sende Alarm an Fireplan für RIC {ric}")
+                try:
+                    fp.alarm(payload_copy)
+                except Exception as e:
+                    logger.warning(f"[Fireplan] Fehler beim Senden des Alarms: {e}")
+
+        # === Feuersoftware Alarm
+        if os.getenv("AUSWERTUNG_FEUERSOFTWARE", "False") == "True":
+            ise_codes = custom.get("COBRA_DEVICE_alerted_codes", "")
+            ise_list = [code.strip() for code in ise_codes.split(";") if code.strip()]
+            ric_map = load_ric_map()
+            feuersoftware_rics = [ric_map[code] for code in ise_list if code in ric_map]
+            custom["COBRA_DEVICE_alerted_codes_translated"] = ";".join(feuersoftware_rics)
+
+            try:
+                post_feuersoftware_alarm(data)
+            except Exception as e:
+                logger.warning(f"[Feuersoftware] Fehler beim Senden des Alarms: {e}")
 
     except Exception as e:
         logger.error(f"Fehler beim Verarbeiten des Alarms: {e}")
@@ -160,13 +185,12 @@ def build_fireplan_payload(alamos_data):
 
     zusatzinfo_parts = [
         custom.get("COBRA_comment"),
-        custom.get("COBRA_keyword_diagnosis"),
-        custom.get("COBRA_comment")  # Optional doppelt, falls mehrfach hilfreich
+        custom.get("COBRA_keyword_diagnosis")
     ]
     zusatzinfo = " – ".join(filter(None, zusatzinfo_parts))
 
     return {
-        "einsatzstichwort": d.get("keyword_description"),   # ✅ Beschreibung statt Code
+        "einsatzstichwort": d.get("keyword_description"),   
         "strasse": loc.get("street"),
         "hausnummer": loc.get("house"),
         "ort": loc.get("city"),
@@ -214,7 +238,11 @@ def handle_status_message(message):
             except Exception as e:
                 logger.warning(f"[Feuersoftware] Fehler beim Senden des Fahrzeugstatus: {e}")
 
-
+        if EXTERNE_API_URL and EXTERNE_API_TOKEN:
+            try:
+                post_externer_status(fahrzeug, status)
+            except Exception as e:
+                logger.warning(f"[Externe API] Fehler beim Senden: {e}")
 
         # 👉 Hier direkt Liste aktualisieren
         update_status_list()
@@ -413,13 +441,28 @@ def update_log_text():
     except FileNotFoundError:
         log_text.insert("1.0", "Keine Logdatei gefunden.")
 
+def open_log_file():
+    log_path = os.path.join("logs", "app.log")
+    if os.path.exists(log_path):
+        try:
+            if sys.platform.startswith('win'):
+                os.startfile(log_path)
+            elif sys.platform.startswith('darwin'):
+                subprocess.call(["open", log_path])
+            else:
+                subprocess.call(["xdg-open", log_path])
+        except Exception as e:
+            messagebox.showerror("Fehler", f"Logdatei konnte nicht geöffnet werden:\n{e}")
+    else:
+        messagebox.showwarning("Nicht gefunden", "Logdatei wurde nicht gefunden.")
+
 def setup_log_viewer():
     update_log_text()
     log_tab.after(3000, setup_log_viewer)
 
 # === Einstellungen speichern
 def save_env(data):
-    env_path = ".env"
+    env_path = os.path.join("config", ".env")
     load_dotenv(env_path)
     for key, value in data.items():
         set_key(env_path, key, value)
@@ -536,7 +579,9 @@ def update_status_list():
 # Log-Tab
 log_text = tk.Text(log_tab, wrap="none")
 log_text.pack(fill="both", expand=True)
-tk.Button(log_tab, text="🧹 Logs löschen", command=clear_logs, width=25).pack(pady=10)
+tk.Button(log_tab, text="🧹 Logs löschen", command=clear_logs, width=25).pack(pady=(10, 5))
+tk.Button(log_tab, text="📂 Im Editor öffnen", command=open_log_file, width=25).pack(pady=(0, 10))
+
 
 # === Einstellungen-Tab (scrollbarfähig) ===
 env_fields = {
@@ -548,10 +593,12 @@ env_fields = {
     "MQTT_PASSWORD": tk.StringVar(value=os.getenv("MQTT_PASSWORD", "")),
     "FIREPLAN_SECRET": tk.StringVar(value=os.getenv("FIREPLAN_SECRET", "")),
     "FIREPLAN_DIVISION": tk.StringVar(value=os.getenv("FIREPLAN_DIVISION", "")),
-    "FEUERSOFTWARE_API_TOKEN": tk.StringVar(value=os.getenv("FEUERSOFTWARE_API_TOKEN", "")),
+    "FEUERSOFTWARE_ORGA_API_TOKEN": tk.StringVar(value=os.getenv("FEUERSOFTWARE_API_TOKEN", "")),
     "LOG_LEVEL": tk.StringVar(value=os.getenv("LOG_LEVEL", "INFO").upper()),
     "AUSWERTUNG_FIREPLAN": tk.BooleanVar(value=os.getenv("AUSWERTUNG_FIREPLAN", "True") == "True"),
-    "AUSWERTUNG_FEUERSOFTWARE": tk.BooleanVar(value=os.getenv("AUSWERTUNG_FEUERSOFTWARE", "False") == "True")
+    "AUSWERTUNG_FEUERSOFTWARE": tk.BooleanVar(value=os.getenv("AUSWERTUNG_FEUERSOFTWARE", "False") == "True"),
+    "EXTERNE_API_URL": tk.StringVar(value=os.getenv("EXTERNE_API_URL", "")),
+    "EXTERNE_API_TOKEN": tk.StringVar(value=os.getenv("EXTERNE_API_TOKEN", ""))
 }
 
 # Canvas & Scrollbar
@@ -664,6 +711,73 @@ def open_ric_editor():
 
     save_btn = tk.Button(win, text="💾 Speichern & Schließen", command=save)
     save_btn.pack(pady=10)
+
+# === Feuersoftware Token-Editor ===
+tk.Label(scrollable_frame, text="🔑 Feuersoftware Abteilungs-API-Tokens", font=("Segoe UI", 10, "bold")).pack(anchor="w", padx=20, pady=(30, 5))
+ttk.Button(scrollable_frame, text="🔧 Tokens bearbeiten", command=lambda: open_fs_token_editor(), width=30).pack(pady=10, padx=20, anchor="w")
+
+def open_fs_token_editor():
+    win = tk.Toplevel(root)
+    win.title("Feuersoftware API-Tokens bearbeiten")
+    win.geometry("600x500")
+    win.resizable(True, True)
+
+    tk.Label(win, text="🔧 Bearbeite hier deine API-Tokens für verschiedene Standorte",
+             font=("Segoe UI", 10, "bold")).pack(pady=(10, 5))
+
+    frame = tk.Frame(win)
+    frame.pack(fill="both", expand=True, padx=10, pady=10)
+
+    rows = []
+
+    def add_row(name="", token=""):
+        row_frame = tk.Frame(frame)
+        row_frame.pack(fill="x", pady=3)
+
+        name_var = tk.StringVar(value=name)
+        token_var = tk.StringVar(value=token)
+
+        tk.Entry(row_frame, textvariable=name_var, width=20).pack(side="left", padx=5)
+        tk.Entry(row_frame, textvariable=token_var, width=50, show="*").pack(side="left", padx=5)
+        tk.Button(row_frame, text="🗑", command=lambda: remove_row(row_frame)).pack(side="left", padx=5)
+
+        rows.append((row_frame, name_var, token_var))
+
+    def remove_row(row_frame):
+        for r in rows:
+            if r[0] == row_frame:
+                r[0].destroy()
+                rows.remove(r)
+                break
+
+    # Tokens laden
+    token_path = os.path.join("config", "fs_api_tokens.json")
+    try:
+        with open(token_path, "r", encoding="utf-8") as f:
+            token_data = json.load(f)
+            for item in token_data:
+                add_row(item.get("name", ""), item.get("token", ""))
+    except:
+        pass
+
+    tk.Button(win, text="➕ Eintrag hinzufügen", command=lambda: add_row()).pack(pady=5)
+
+    def save():
+        token_list = []
+        for _, name_var, token_var in rows:
+            name = name_var.get().strip()
+            token = token_var.get().strip()
+            if name and token:
+                token_list.append({"name": name, "token": token})
+        try:
+            with open(token_path, "w", encoding="utf-8") as f:
+                json.dump(token_list, f, indent=2)
+            messagebox.showinfo("Gespeichert", "Tokens gespeichert ✅", parent=win)
+            win.destroy()
+        except Exception as e:
+            messagebox.showerror("Fehler", f"Speichern fehlgeschlagen:\n{e}", parent=win)
+
+    tk.Button(win, text="💾 Speichern & Schließen", command=save).pack(pady=10)
 
 
 
