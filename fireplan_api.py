@@ -120,14 +120,7 @@ class Fireplan:
                 logger.warning(f"[Fireplan] Ungültige FMS-Daten: kennung={kennung}, status={status}")
                 return
 
-            if timestamp:
-                try:
-                    dt = datetime.fromtimestamp(int(str(timestamp)[:10]), pytz.timezone("Europe/Berlin"))
-                except Exception:
-                    logger.warning("[Fireplan] Timestamp konnte nicht geparst werden – aktuelle Zeit wird verwendet.")
-                    dt = datetime.now(pytz.timezone("Europe/Berlin"))
-            else:
-                dt = datetime.now(pytz.timezone("Europe/Berlin"))
+            dt = datetime.now(pytz.timezone("Europe/Berlin"))
 
             status_time = dt.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
 
