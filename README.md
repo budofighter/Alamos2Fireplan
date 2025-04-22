@@ -23,10 +23,15 @@ Einen funktionierenden MQTT-Broker, welcher die Daten von Alamos empfangen kann.
 
 ---
 
-## 🧪 Test & Logs
+## 🔝 Updates
+➡ [Updates](https://github.com/budofighter/Alamos2Fireplan/wiki/Updates)
+
+---
+## 🧪 Test & Logs & Konfigurationsdateien
 
 - Logdatei: `logs/app.log`
 - Lokale Datenbank: `alarme.db` (SQLite-basiert)
+- Konfiguration: `config/*`
 - Tab **„📟 Einsätze“** → Doppelklick für Details & erneutes Senden
 - Tab **„📄 Logs“** → Log einsehen oder löschen
 - Log-Level über die Einstellungen konfigurierbar
