@@ -9,17 +9,17 @@
 
 Einen funktionierenden MQTT-Broker, welcher die Daten von Alamos empfangen kann.
 
-➡ [Anleitung zur Einrichtung von Mosquitto (MQTT-Broker)](https://github.com/budofighter/Alamos2Fireplan/wiki/1.-Mosquitto-MQTT%E2%80%90Broker-%E2%80%93-Installation-&-Konfiguration-(Windows))
+➡ [📘 Anleitung zur Einrichtung von Mosquitto (MQTT-Broker)](https://github.com/budofighter/Alamos2Fireplan/wiki/Mosquitto-MQTT%E2%80%90Broker-%E2%80%93-Installation-&-Konfiguration-(Windows))
 
 ---
 
 ## Installationsanleitung
-➡ [Installationsanleitung](https://github.com/budofighter/Alamos2Fireplan/wiki/2.-Installationsanleitung)
+➡ [Installationsanleitung](https://github.com/budofighter/Alamos2Fireplan/wiki/Installationsanleitung)
 
 ---
 
 ## Konfiguration von Alamos, Fireplan & Feuersoftware
-➡ [Konfiguration](https://github.com/budofighter/Alamos2Fireplan/wiki/3.-Konfiguration)
+➡ [Konfiguration](https://github.com/budofighter/Alamos2Fireplan/wiki/Konfiguration)
 
 ---
 
