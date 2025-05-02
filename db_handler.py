@@ -40,7 +40,9 @@ class DBHandler:
             "custom_alerted_semicolon": "TEXT",
             "custom_alerted_codes": "TEXT",
             "custom_alerted_rics": "TEXT",  # <<< NEU
+            "custom_alerted_rics": "TEXT",  # <<< NEU
             "custom_alarm_state": "TEXT",
+            "update_log": "TEXT",
             "update_log": "TEXT",
             "raw_json": "TEXT"
         }
@@ -54,6 +56,7 @@ class DBHandler:
                 logger.info(f"[DB] Neue Spalte hinzugefügt: {column} ({column_type})")
 
         self.conn.commit()
+
 
 
 
@@ -152,8 +155,90 @@ class DBHandler:
                 ))
                 logger.info(f"[DB] Neuer Alarm gespeichert: {external_id}")
 
+            external_id = alarm_data.get("externalId")
+            self.cursor.execute("SELECT id FROM alarme WHERE external_id = ?", (external_id,))
+            existing = self.cursor.fetchone()
+
+            if existing:
+                # UPDATE
+                self.cursor.execute('''
+                    UPDATE alarme SET
+                        timestamp = ?, keyword = ?, keyword_description = ?, message = ?,
+                        building = ?, street = ?, house = ?, postal_code = ?, city = ?, city_abbr = ?,
+                        units = ?, vehicles = ?, alarmed_time = ?, coordinate = ?,
+                        custom_comment = ?, custom_diagnosis = ?, custom_alerted = ?, custom_alerted_semicolon = ?,
+                        custom_alerted_codes = ?, custom_alerted_rics = ?, custom_alarm_state = ?,
+                        update_log = ?, raw_json = ?
+                    WHERE external_id = ?
+                ''', (
+                    alarm_data.get("timestamp"),
+                    alarm_data.get("keyword"),
+                    alarm_data.get("keyword_description"),
+                    alarm_data.get("message"),
+                    alarm_data.get("building"),
+                    alarm_data.get("street"),
+                    alarm_data.get("house"),
+                    alarm_data.get("postalCode"),
+                    alarm_data.get("city"),
+                    alarm_data.get("city_abbr"),
+                    alarm_data.get("units"),
+                    alarm_data.get("vehicles"),
+                    alarm_data.get("alarmedTime"),
+                    alarm_data.get("coordinate"),
+                    alarm_data.get("custom_comment"),
+                    alarm_data.get("custom_diagnosis"),
+                    alarm_data.get("custom_alerted"),
+                    alarm_data.get("custom_alerted_semicolon"),
+                    alarm_data.get("custom_alerted_codes"),
+                    alarm_data.get("custom_alerted_rics"),
+                    alarm_data.get("custom_alarm_state"),
+                    alarm_data.get("update_log"),
+                    alarm_data.get("raw_json"),
+                    external_id
+                ))
+                logger.info(f"[DB] Alarm aktualisiert: {external_id}")
+            else:
+                # INSERT
+                self.cursor.execute('''
+                    INSERT INTO alarme (
+                        timestamp, external_id, keyword, keyword_description, message,
+                        building, street, house, postal_code, city, city_abbr,
+                        units, vehicles, alarmed_time, coordinate,
+                        custom_comment, custom_diagnosis, custom_alerted, custom_alerted_semicolon,
+                        custom_alerted_codes, custom_alerted_rics, custom_alarm_state,
+                        update_log, raw_json
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    alarm_data.get("timestamp"),
+                    external_id,
+                    alarm_data.get("keyword"),
+                    alarm_data.get("keyword_description"),
+                    alarm_data.get("message"),
+                    alarm_data.get("building"),
+                    alarm_data.get("street"),
+                    alarm_data.get("house"),
+                    alarm_data.get("postalCode"),
+                    alarm_data.get("city"),
+                    alarm_data.get("city_abbr"),
+                    alarm_data.get("units"),
+                    alarm_data.get("vehicles"),
+                    alarm_data.get("alarmedTime"),
+                    alarm_data.get("coordinate"),
+                    alarm_data.get("custom_comment"),
+                    alarm_data.get("custom_diagnosis"),
+                    alarm_data.get("custom_alerted"),
+                    alarm_data.get("custom_alerted_semicolon"),
+                    alarm_data.get("custom_alerted_codes"),
+                    alarm_data.get("custom_alerted_rics"),
+                    alarm_data.get("custom_alarm_state"),
+                    alarm_data.get("update_log"),
+                    alarm_data.get("raw_json")
+                ))
+                logger.info(f"[DB] Neuer Alarm gespeichert: {external_id}")
+
             self.conn.commit()
         except Exception as e:
+            logger.error(f"[DB] Fehler beim Speichern/Aktualisieren des Alarms: {e}")
             logger.error(f"[DB] Fehler beim Speichern/Aktualisieren des Alarms: {e}")
 
 
@@ -174,5 +259,3 @@ class DBHandler:
         if row and row[0]:
             return set(ric.strip() for ric in row[0].split(";") if ric.strip())
         return set()
-
-
