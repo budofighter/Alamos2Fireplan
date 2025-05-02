@@ -76,20 +76,66 @@ def handle_alarm(data):
         loc = d.get("location", {})
         custom = d.get("custom", {})
 
-        alarmed_vehicles = d.get("vehicles", [])
-        alarmed_time = None
-        if alarmed_vehicles:
-            try:
-                raw_time = alarmed_vehicles[0].get("alarmedTime")
-                if raw_time:
-                    alarmed_time = datetime.fromtimestamp(int(str(raw_time)[:10])).isoformat()
-            except Exception as e:
-                logger.warning(f"Fehler beim Verarbeiten der alarmedTime: {e}")
+        external_id = d.get("externalId")
+        ise_codes_raw = custom.get("COBRA_DEVICE_alerted_codes", "")
+        ise_list = [code.strip() for code in ise_codes_raw.split(";") if code.strip()]
 
-        # === Alarm speichern in DB ===
+        ric_map = load_ric_map()
+        translated_rics = set(ric_map.get(code) for code in ise_list if code in ric_map)
+
+        # Hole bestehenden Eintrag
+        db.cursor.execute("SELECT custom_alerted_rics, update_log FROM alarme WHERE external_id = ?", (external_id,))
+        row = db.cursor.fetchone()
+
+        if row:
+            logger.info(f"🔄 Bestehender Alarm gefunden (external_id={external_id})")
+            existing_rics = set(row[0].split(";")) if row[0] else set()
+            new_rics = translated_rics - existing_rics
+        else:
+            logger.info(f"🆕 Neuer Alarm (external_id={external_id})")
+            existing_rics = set()
+            new_rics = translated_rics
+
+        # Nur neue RICs alarmieren
+        if new_rics:
+            logger.info(f"✅ Neue RICs zu alarmieren: {new_rics}")
+
+            # Fireplan
+            if os.getenv("AUSWERTUNG_FIREPLAN", "False") == "True":
+                for ric in new_rics:
+                    payload_copy = build_fireplan_payload(data)
+                    payload_copy["ric"] = ric
+                    try:
+                        fp.alarm(payload_copy)
+                        logger.info(f"🚨 Alarm an Fireplan für RIC {ric}")
+                    except Exception as e:
+                        logger.warning(f"[Fireplan] Fehler: {e}")
+
+            # Feuersoftware
+            if os.getenv("AUSWERTUNG_FEUERSOFTWARE", "False") == "True":
+                custom["COBRA_DEVICE_alerted_codes_translated"] = ";".join(new_rics)
+                try:
+                    post_feuersoftware_alarm(data)
+                except Exception as e:
+                    logger.warning(f"[Feuersoftware] Fehler: {e}")
+
+        # Update Log vorbereiten
+        update_log = []
+        if row and row[1]:
+            try:
+                update_log = json.loads(row[1])
+            except Exception:
+                logger.warning(f"[DB] Update-Log konnte nicht geparst werden")
+
+        update_log.append({
+            "timestamp": datetime.now().isoformat(),
+            "new_rics": sorted(list(new_rics))
+        })
+
+        # Alarm-Daten zusammenstellen
         alarm_data = {
             "timestamp": data.get("timestamp"),
-            "externalId": d.get("externalId"),
+            "externalId": external_id,
             "keyword": d.get("keyword"),
             "keyword_description": d.get("keyword_description"),
             "message": " ".join(d.get("message", [])) if d.get("message") else None,
@@ -98,59 +144,30 @@ def handle_alarm(data):
             "house": loc.get("house"),
             "postalCode": loc.get("postalCode"),
             "city": loc.get("city"),
-            "city_abbr": loc.get("city_abbr"), 
+            "city_abbr": loc.get("city_abbr"),
             "units": ", ".join([u.get("address", "") for u in d.get("units", [])]) if d.get("units") else None,
-            "vehicles": json.dumps(alarmed_vehicles, ensure_ascii=False),
-            "alarmedTime": alarmed_time,
+            "vehicles": json.dumps(d.get("vehicles", []), ensure_ascii=False),
+            "alarmedTime": datetime.now().isoformat(),
             "coordinate": json.dumps(loc.get("coordinate"), ensure_ascii=False) if loc.get("coordinate") else None,
             "custom_comment": custom.get("COBRA_comment"),
             "custom_diagnosis": custom.get("COBRA_keyword_diagnosis"),
             "custom_alerted": custom.get("COBRA_DEVICE_alerted"),
             "custom_alerted_semicolon": custom.get("COBRA_DEVICE_alerted_semicolon"),
-            "custom_alerted_codes": custom.get("COBRA_DEVICE_alerted_codes"),
+            "custom_alerted_codes": ise_codes_raw,
+            "custom_alerted_rics": ";".join(sorted(existing_rics.union(translated_rics))),
             "custom_alarm_state": custom.get("alarmState"),
+            "update_log": json.dumps(update_log, ensure_ascii=False),
             "raw_json": json.dumps(data, ensure_ascii=False)
         }
 
-        try:
-            db.log_alarm(alarm_data)
-            update_alarm_list()
-            logger.info(f"📥 Alarm gespeichert: {alarm_data.get('keyword_description')} ({alarm_data.get('externalId')})")
-        except Exception as e:
-            logger.error(f"[DB] Fehler beim Speichern des Alarms: {e}")
-
-        # === Payload für Fireplan vorbereiten
-        payload = build_fireplan_payload(data)
-        ric_list = [r for r in payload.get("ric", "").split(";") if r.strip()]
-
-        # === Fireplan Alarm
-        if os.getenv("AUSWERTUNG_FIREPLAN", "False") == "True":
-            for ric in ric_list:
-                if not ric:
-                    continue
-                payload_copy = payload.copy()
-                payload_copy["ric"] = ric
-                logger.info(f"🚨 Sende Alarm an Fireplan für RIC {ric}")
-                try:
-                    fp.alarm(payload_copy)
-                except Exception as e:
-                    logger.warning(f"[Fireplan] Fehler beim Senden des Alarms: {e}")
-
-        # === Feuersoftware Alarm
-        if os.getenv("AUSWERTUNG_FEUERSOFTWARE", "False") == "True":
-            ise_codes = custom.get("COBRA_DEVICE_alerted_codes", "")
-            ise_list = [code.strip() for code in ise_codes.split(";") if code.strip()]
-            ric_map = load_ric_map()
-            feuersoftware_rics = [ric_map[code] for code in ise_list if code in ric_map]
-            custom["COBRA_DEVICE_alerted_codes_translated"] = ";".join(feuersoftware_rics)
-
-            try:
-                post_feuersoftware_alarm(data)
-            except Exception as e:
-                logger.warning(f"[Feuersoftware] Fehler beim Senden des Alarms: {e}")
+        # Speichern
+        db.log_alarm(alarm_data)
+        update_alarm_list()
 
     except Exception as e:
-        logger.error(f"Fehler beim Verarbeiten des Alarms: {e}")
+        logger.error(f"Fehler in handle_alarm: {e}")
+
+
 
 def translate_ise_to_ric(ise_string):
     mapping_raw = os.getenv("RIC_MAP", "")
@@ -377,6 +394,22 @@ def show_alarm_details(event):
             detail_lines.append(f"{label}: {value}")
 
     text.insert("1.0", "\n\n".join(detail_lines))
+
+    update_log_raw = alarm_dict.get("update_log")
+    if update_log_raw:
+        try:
+            update_entries = json.loads(update_log_raw)
+            if update_entries:
+                log_lines = []
+                for entry in update_entries:
+                    ts = entry.get("timestamp", "?")
+                    fields = ", ".join(entry.get("updated_fields", []))
+                    new_rics = ", ".join(entry.get("new_rics", []))
+                    log_lines.append(f"🕒 {ts} – Geänderte Felder: {fields} – Neue RICs: {new_rics}")
+                detail_lines.append("🔄 Änderungsprotokoll:\n" + "\n".join(log_lines))
+        except Exception as e:
+            detail_lines.append(f"🔄 Änderungsprotokoll: Fehler beim Parsen ({e})")
+
 
     raw_json = alarm_dict.get("raw_json")
     if raw_json:
