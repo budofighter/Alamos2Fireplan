@@ -287,25 +287,33 @@ def toggle_connection():
             global is_running, mqtt_handler
             if mqtt_handler:
                 mqtt_handler.stop()
+
             mqtt_handler = MQTTHandler(
-                broker=MQTT_BROKER,
-                port=MQTT_PORT,
-                topic=MQTT_TOPIC,
-                status_topic=MQTT_STATUS_TOPIC,
-                username=MQTT_USERNAME,
-                password=MQTT_PASSWORD,
+                broker=os.getenv("MQTT_BROKER"),
+                port=int(os.getenv("MQTT_PORT")),
+                topic=os.getenv("MQTT_TOPIC"),
+                status_topic=os.getenv("MQTT_STATUS_TOPIC"),
+                username=os.getenv("MQTT_USERNAME"),
+                password=os.getenv("MQTT_PASSWORD"),
                 on_alarm=handle_alarm,
                 on_status=handle_status_message,
                 on_disconnect=lambda: update_status("❌ Verbindung verloren", "red"),
-                on_reconnect=lambda: update_status("🔄 Wieder verbunden", "green")
+                on_reconnect=lambda: update_status("✅ Verbunden mit MQTT-Broker", "green")
             )
+
             mqtt_handler.start()
-            is_running = True
-            start_stop_btn.config(text="🛑 Stoppen")
-            update_status("✅ Verbunden mit MQTT-Broker", "green")
-            update_alarm_list()
+
+            if mqtt_handler._running:
+                is_running = True
+                start_stop_btn.config(text="🛑 Stoppen")
+                update_alarm_list()
+            else:
+                is_running = False
+                start_stop_btn.config(text="▶️ Starten")
+                update_status("❌ Verbindung fehlgeschlagen", "red")
 
         threading.Thread(target=start, daemon=True).start()
+
     else:
         if mqtt_handler:
             mqtt_handler.stop()
@@ -503,6 +511,16 @@ def save_env(data):
     logger.info("Einstellungen gespeichert.")
     set_log_level()
 
+def save_env_from_form():
+    values = {}
+    for key, var in env_fields.items():
+        values[key] = str(var.get())
+    save_env(values)
+
+    # Statt hier Code reinzuschreiben → zentral rufen:
+    reload_runtime_config()
+
+
 # === StatusDB
 def clear_status_entries():
     if messagebox.askyesno("Einträge löschen", "Alle Fahrzeugstatus wirklich löschen?"):
@@ -510,6 +528,37 @@ def clear_status_entries():
         db.conn.commit()
         update_status_list()
         logger.info("[GUI] Fahrzeugstatus gelöscht.")
+
+def reload_runtime_config():
+    logger.info("🔄 Laufzeitkonfiguration wird neu geladen...")
+    load_dotenv(dotenv_path=os.path.join("config", ".env"), override=True)
+
+    # Log-Level live anpassen
+    set_log_level()
+
+    # MQTT-Handler neu starten, falls aktiv
+    global mqtt_handler, is_running
+    if is_running:
+        logger.info("🔄 MQTT-Handler wird neu gestartet mit aktualisierten Einstellungen...")
+        mqtt_handler.stop()
+        mqtt_handler = MQTTHandler(
+            broker=os.getenv("MQTT_BROKER"),
+            port=int(os.getenv("MQTT_PORT")),
+            topic=os.getenv("MQTT_TOPIC"),
+            status_topic=os.getenv("MQTT_STATUS_TOPIC"),
+            username=os.getenv("MQTT_USERNAME"),
+            password=os.getenv("MQTT_PASSWORD"),
+            on_alarm=handle_alarm,
+            on_status=handle_status_message,
+            on_disconnect=lambda: update_status("❌ Verbindung verloren", "red"),
+            on_reconnect=lambda: update_status("🔄 Wieder verbunden", "green")
+        )
+        mqtt_handler.start()
+        logger.info("✅ MQTT-Handler wurde mit neuen Einstellungen neu gestartet.")
+
+    global fp
+    fp = Fireplan()
+    logger.info("✅ Fireplan-API wurde mit neuen Einstellungen neu initialisiert.")
 
 
 # === GUI AUFBAU ===
@@ -677,11 +726,6 @@ for key, var in env_fields.items():
         ttk.Entry(form_frame, textvariable=var, width=40, show=show_char).grid(row=row, column=1, pady=5)
     row += 1
 
-def save_env_from_form():
-    values = {}
-    for key, var in env_fields.items():
-        values[key] = str(var.get())
-    save_env(values)
 
 tk.Button(
     form_frame,
