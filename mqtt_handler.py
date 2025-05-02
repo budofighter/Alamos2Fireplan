@@ -108,6 +108,8 @@ class MQTTHandler:
             self.client.loop_start()
         except Exception as e:
             logger.error(f"[MQTT] Fehler beim Start: {e}")
+            self._running = False 
+
 
     def stop(self):
         self._running = False
