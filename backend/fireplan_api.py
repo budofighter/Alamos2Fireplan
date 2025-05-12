@@ -1,13 +1,11 @@
 import requests
 import cerberus
-import sys
-import os
 import json
 import pytz
 from datetime import datetime
 from urllib.parse import quote
 from config import FIREPLAN_SECRET, FIREPLAN_DIVISION
-from log_helper import logger  # zentraler Logger
+from backend.log_helper import logger  # zentraler Logger
 
 # Schema Definition
 ALARM_SCHEMA = {

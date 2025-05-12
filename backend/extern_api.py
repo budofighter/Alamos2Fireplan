@@ -1,6 +1,6 @@
 import requests
 import json
-from log_helper import logger
+from backend.log_helper import logger
 from requests.structures import CaseInsensitiveDict
 from config import EXTERNE_API_URL, EXTERNE_API_TOKEN
 

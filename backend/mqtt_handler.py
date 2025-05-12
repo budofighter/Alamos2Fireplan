@@ -2,7 +2,7 @@ import json
 import time
 import threading
 import paho.mqtt.client as mqtt
-from log_helper import logger
+from backend.log_helper import logger
 
 
 class MQTTHandler:

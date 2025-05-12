@@ -2,6 +2,7 @@ import logging
 import os
 import sys
 from logging.handlers import RotatingFileHandler
+from dotenv import load_dotenv
 
 def get_log_dir():
     if getattr(sys, 'frozen', False):  # PyInstaller?
@@ -26,3 +27,7 @@ if not logger.handlers:
     formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
+
+load_dotenv(dotenv_path=os.path.join("config", ".env"))
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+logger.setLevel(getattr(logging, log_level, logging.INFO))
