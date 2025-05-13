@@ -2,6 +2,8 @@ import os
 import json
 from dotenv import load_dotenv
 from backend.log_helper import logger
+from werkzeug.security import generate_password_hash
+
 
 ENV_PATH = os.path.join("config", ".env")
 
@@ -26,6 +28,7 @@ def create_default_env():
                 "FEUERSOFTWARE_API_TOKEN=\n"
                 "EXTERNE_API_URL=\n"
                 "EXTERNE_API_TOKEN=\n"
+                "ADMIN_PASSWORD=" + generate_password_hash("112112") + "\n"
             )
         logger.info(".env-Datei mit Platzhaltern erstellt.")
 
@@ -53,7 +56,7 @@ MQTT_PASSWORD = os.getenv("MQTT_PASSWORD")
 FIREPLAN_API_URL = os.getenv("FIREPLAN_API_URL")
 FIREPLAN_SECRET = os.getenv("FIREPLAN_SECRET")
 FIREPLAN_DIVISION = os.getenv("FIREPLAN_DIVISION")
-APP_VERSION = "2.0.1"
+APP_VERSION = "2.0.2"
 
 AUSWERTUNG_FIREPLAN = os.getenv("AUSWERTUNG_FIREPLAN", "True")
 AUSWERTUNG_FEUERSOFTWARE = os.getenv("AUSWERTUNG_FEUERSOFTWARE", "False")

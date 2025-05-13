@@ -15,34 +15,6 @@
             <img src="{{ url_for('static', filename='logo_fwbs.png') }}" alt="Logo" height="40">
             <span class="fs-4 fw-bold mb-0">Alamos2Fireplan</span>
         </a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
-            <span class="navbar-toggler-icon"></span>
-        </button>
-        <div class="collapse navbar-collapse" id="navbarNav">
-            <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                {% set active = request.endpoint or '' %}
-                <li class="nav-item">
-                    <a class="nav-link {% if active == 'alarms' %}active fw-bold text-primary{% endif %}" href="{{ url_for('alarms') }}">Alarme</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link {% if active == 'status' %}active fw-bold text-primary{% endif %}" href="{{ url_for('status') }}">Status</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link {% if active == 'logs_page' %}active fw-bold text-primary{% endif %}" href="{{ url_for('logs_page') }}">Logs</a>
-                </li>
-                <li class="nav-item">
-                    <a class="nav-link {% if active == 'settings' %}active fw-bold text-primary{% endif %}" href="{{ url_for('settings') }}">Einstellungen</a>
-                </li>
-            </ul>
-
-            <form class="d-flex me-2" id="mqtt-control"></form>
-
-            {% if session.logged_in %}
-            <form class="d-flex" action="{{ url_for('logout') }}" method="get">
-                <button class="btn btn-outline-secondary">Logout</button>
-            </form>
-            {% endif %}
-        </div>
     </div>
 </nav>
 
