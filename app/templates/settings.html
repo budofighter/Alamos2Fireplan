@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block title %}Einstellungen{% endblock %}
+{% block content %}
+
+<h1 class="mb-4">Einstellungen</h1>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <form action="{{ url_for('save_settings') }}" method="post">
+      <div class="accordion" id="settingsAccordion">
+
+        <!-- MQTT -->
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed bg-light fw-semibold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseMQTT">
+              MQTT Einstellungen
+            </button>
+          </h2>
+          <div id="collapseMQTT" class="accordion-collapse collapse">
+            <div class="accordion-body">
+              <div class="mb-3"><label class="form-label">MQTT-Broker-Adresse</label><input type="text" class="form-control" name="MQTT_BROKER" value="{{ settings.MQTT_BROKER }}"></div>
+              <div class="mb-3"><label class="form-label">MQTT-Port</label><input type="text" class="form-control" name="MQTT_PORT" value="{{ settings.MQTT_PORT }}"></div>
+              <div class="mb-3"><label class="form-label">MQTT-Alarm-Topic</label><input type="text" class="form-control" name="MQTT_TOPIC" value="{{ settings.MQTT_TOPIC }}"></div>
+              <div class="mb-3"><label class="form-label">MQTT-Status-Topic</label><input type="text" class="form-control" name="MQTT_STATUS_TOPIC" value="{{ settings.MQTT_STATUS_TOPIC }}"></div>
+              <div class="mb-3"><label class="form-label">MQTT-Benutzername</label><input type="text" class="form-control" name="MQTT_USERNAME" value="{{ settings.MQTT_USERNAME }}"></div>
+              <div class="mb-3"><label class="form-label">MQTT-Passwort</label><input type="text" class="form-control" name="MQTT_PASSWORD" value="{{ settings.MQTT_PASSWORD }}"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Fireplan -->
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed bg-light fw-semibold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseFireplan">
+              Fireplan
+            </button>
+          </h2>
+          <div id="collapseFireplan" class="accordion-collapse collapse">
+            <div class="accordion-body">
+              <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" id="AUSWERTUNG_FIREPLAN" name="AUSWERTUNG_FIREPLAN" value="True" {% if settings.AUSWERTUNG_FIREPLAN == "True" %}checked{% endif %}>
+                <label class="form-check-label" for="AUSWERTUNG_FIREPLAN">Fireplan-Auswertung aktivieren</label>
+              </div>
+              <div class="mb-3"><label class="form-label">Fireplan-API-Secret</label><input type="text" class="form-control" name="FIREPLAN_SECRET" value="{{ settings.FIREPLAN_SECRET }}"></div>
+              <div class="mb-3"><label class="form-label">Fireplan-API-Division</label><input type="text" class="form-control" name="FIREPLAN_DIVISION" value="{{ settings.FIREPLAN_DIVISION }}"></div>
+              <a href="{{ url_for('ric_editor') }}" class="btn btn-secondary btn-sm">RIC Editor</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Feuersoftware -->
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed bg-light fw-semibold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseFeuersoftware">
+              Feuersoftware
+            </button>
+          </h2>
+          <div id="collapseFeuersoftware" class="accordion-collapse collapse">
+            <div class="accordion-body">
+              <div class="form-check mb-3">
+                <input class="form-check-input" type="checkbox" id="AUSWERTUNG_FEUERSOFTWARE" name="AUSWERTUNG_FEUERSOFTWARE" value="True" {% if settings.AUSWERTUNG_FEUERSOFTWARE == "True" %}checked{% endif %}>
+                <label class="form-check-label" for="AUSWERTUNG_FEUERSOFTWARE">Feuersoftware-Auswertung aktivieren</label>
+              </div>
+              <div class="mb-3"><label class="form-label">Feuersoftware Orga-API-Token</label><input type="text" class="form-control" name="FEUERSOFTWARE_API_TOKEN" value="{{ settings.FEUERSOFTWARE_API_TOKEN }}"></div>
+              <a href="{{ url_for('tokens') }}" class="btn btn-secondary btn-sm">Abteilungs-API-Tokens</a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Externe API -->
+        <div class="accordion-item">
+          <h2 class="accordion-header">
+            <button class="accordion-button collapsed bg-light fw-semibold" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAPI">
+              Externe API
+            </button>
+          </h2>
+          <div id="collapseAPI" class="accordion-collapse collapse">
+            <div class="accordion-body">
+              <div class="mb-3"><label class="form-label">Externe API-URL</label><input type="text" class="form-control" name="EXTERNE_API_URL" value="{{ settings.EXTERNE_API_URL }}"></div>
+              <div class="mb-3"><label class="form-label">Externe API-Token</label><input type="text" class="form-control" name="EXTERNE_API_TOKEN" value="{{ settings.EXTERNE_API_TOKEN }}"></div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Nur speichern Button innerhalb -->
+      <div class="d-flex justify-content-start mt-4">
+        <button type="submit" class="btn btn-success">Einstellungen speichern</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Zurück-Button außerhalb -->
+<a href="{{ url_for('alarms') }}" class="btn btn-secondary">← Zurück</a>
+
+{% endblock %}

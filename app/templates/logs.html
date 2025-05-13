@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Logs{% endblock %}
+{% block content %}
+
+<h1 class="mb-4">System-Logs</h1>
+
+<div class="card mb-4">
+  <div class="card-body">
+    
+    <!-- Log-Level Auswahl -->
+    <form action="{{ url_for('set_log_level') }}" method="post" class="mb-3">
+      <label for="log_level" class="form-label">Log-Level:</label>
+      <select name="log_level" id="log_level" class="form-select w-auto d-inline" onchange="this.form.submit()">
+        {% for level in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] %}
+          <option value="{{ level }}" {% if level == current_level %}selected{% endif %}>{{ level }}</option>
+        {% endfor %}
+      </select>
+    </form>
+
+    <!-- Log-Anzeige -->
+    <pre id="log-container" class="bg-light p-3 border" style="height: 400px; overflow-y: scroll;">
+      Lade Logs...
+      </pre>
+
+    <!-- Aktionen -->
+    <div class="d-flex gap-2 mt-3">
+      <form action="{{ url_for('clear_logs') }}" method="post" onsubmit="return confirm('Logs wirklich löschen?');">
+        <button type="submit" class="btn btn-danger">Logs leeren</button>
+      </form>
+
+      <a href="{{ url_for('download_logs') }}" class="btn btn-success">Logdatei herunterladen</a>
+
+    </div>
+
+  </div>
+</div>
+
+<a href="{{ url_for('alarms') }}" class="btn btn-secondary">← Zurück</a>
+
+
+
+{% endblock %}

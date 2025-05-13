@@ -2,7 +2,7 @@ import os
 import requests
 import json
 from datetime import datetime
-from log_helper import logger
+from backend.log_helper import logger
 from dotenv import load_dotenv
 
 FS_TOKEN_PATH = os.path.join("config", "fs_api_tokens.json")

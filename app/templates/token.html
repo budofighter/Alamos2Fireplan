@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}API Tokens{% endblock %}
+{% block content %}
+<h1 class="mb-4">Feuersoftware API-Tokens</h1>
+
+<div class="card mb-4">
+  <div class="card-body">
+
+    <!-- Form für Speichern + Token-Liste -->
+    <form action="{{ url_for('save_tokens') }}" method="post">
+      {% for token in tokens %}
+      <div class="row mb-2 align-items-center">
+        <div class="col-md-5">
+          <input type="text" class="form-control" name="name_{{ loop.index }}" value="{{ token.name }}" placeholder="Name">
+        </div>
+        <div class="col-md-6">
+          <input type="text" class="form-control" name="token_{{ loop.index }}" value="{{ token.token }}" placeholder="Token">
+        </div>
+        <div class="col-md-1 text-end">
+          <button type="submit"
+                  formaction="{{ url_for('delete_token') }}"
+                  formmethod="post"
+                  name="index"
+                  value="{{ loop.index0 }}"
+                  class="btn btn-danger btn-sm"
+                  onclick="return confirm('Diesen Token wirklich löschen?');">
+            🗑
+          </button>
+        </div>
+      </div>
+      {% endfor %}
+
+      <!-- Speichern-Button im Formular -->
+      <button type="submit" class="btn btn-success mt-3">Speichern</button>
+    </form>
+
+    <!-- Getrennter Button für Hinzufügen -->
+    <form action="{{ url_for('add_token') }}" method="post" class="d-inline-block mt-3 ms-2">
+      <button type="submit" class="btn btn-warning">+ Neuen Token hinzufügen</button>
+    </form>
+
+  </div>
+</div>
+
+<a href="{{ url_for('settings') }}" class="btn btn-secondary">← Zurück</a>
+{% endblock %}

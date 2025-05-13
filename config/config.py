@@ -1,7 +1,7 @@
 import os
 import json
 from dotenv import load_dotenv
-from log_helper import logger
+from backend.log_helper import logger
 
 ENV_PATH = os.path.join("config", ".env")
 
@@ -53,7 +53,7 @@ MQTT_PASSWORD = os.getenv("MQTT_PASSWORD")
 FIREPLAN_API_URL = os.getenv("FIREPLAN_API_URL")
 FIREPLAN_SECRET = os.getenv("FIREPLAN_SECRET")
 FIREPLAN_DIVISION = os.getenv("FIREPLAN_DIVISION")
-APP_VERSION = "1.0.6"
+APP_VERSION = "2.0.1"
 
 AUSWERTUNG_FIREPLAN = os.getenv("AUSWERTUNG_FIREPLAN", "True")
 AUSWERTUNG_FEUERSOFTWARE = os.getenv("AUSWERTUNG_FEUERSOFTWARE", "False")

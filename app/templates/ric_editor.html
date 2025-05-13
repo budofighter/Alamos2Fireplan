@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}RIC Editor{% endblock %}
+{% block content %}
+<h1 class="mb-4">ISE → RIC Zuordnung</h1>
+
+<div class="card mb-4">
+  <div class="card-body">
+    <form action="{{ url_for('save_ric_map') }}" method="post">
+        <div class="mb-3">
+            <textarea name="ric_map" rows="20" class="form-control" style="font-family: monospace;">{{ ric_map_content }}</textarea>
+        </div>
+        <button type="submit" class="btn btn-success">Speichern</button>
+    </form>
+  </div>
+</div>
+
+<a href="{{ url_for('settings') }}" class="btn btn-secondary">← Zurück</a>
+{% endblock %}
