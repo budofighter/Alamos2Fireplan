@@ -37,6 +37,11 @@ table th {
     vertical-align: middle;
 }
 
+.table-container {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
 /* ========== Karten und Layout ========== */
 .card {
     border-radius: 0.5rem;
@@ -106,6 +111,25 @@ input[type="text"], select, textarea {
     background-color: #f1f1f1;
     border: 1px solid #ccc;
     white-space: pre-wrap;
+}
+
+
+.log-info {
+    color: #6c757d; /* grau */
+}
+.log-warning {
+    color: #ffc107; /* gelb/orange */
+}
+.log-error {
+    color: #dc3545; /* rot */
+    font-weight: bold;
+}
+.log-debug {
+    color: #17a2b8; /* hellblau */
+}
+.log-critical {
+    color: #b02a37; /* dunkles rot */
+    font-weight: bold;
 }
 
 /* ========== Badges für Fahrzeugstatus ========== */

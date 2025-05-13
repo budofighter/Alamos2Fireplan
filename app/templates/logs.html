@@ -19,8 +19,8 @@
 
     <!-- Log-Anzeige -->
     <pre id="log-container" class="bg-light p-3 border" style="height: 400px; overflow-y: scroll;">
-{{ log_content }}
-    </pre>
+      Lade Logs...
+      </pre>
 
     <!-- Aktionen -->
     <div class="d-flex gap-2 mt-3">
@@ -37,16 +37,6 @@
 
 <a href="{{ url_for('alarms') }}" class="btn btn-secondary">← Zurück</a>
 
-<!-- Log-Refresh per AJAX -->
-<script>
-function loadLogs() {
-    fetch('/api/logs')
-        .then(response => response.text())
-        .then(data => {
-            document.getElementById('log-container').textContent = data;
-        });
-}
-setInterval(loadLogs, 5000);
-</script>
+
 
 {% endblock %}

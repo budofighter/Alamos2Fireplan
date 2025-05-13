@@ -4,13 +4,18 @@ __pycache__/
 *.sqlite3
 *.db
 *.log
+package.bat
+*.zip
 
 # Umgebung
 venv/
 .env
 logs/
 *.json
-config/
+config/.env
+config/ric_map.json
+config/fs_api_token.json
+tools/*
 
 # VS Code
 .vscode/

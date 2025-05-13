@@ -1,5 +1,5 @@
 from flask import Flask, render_template, request, redirect, url_for, flash, send_file
-from mqtt_control import start_mqtt, stop_mqtt, get_status
+from app.mqtt_control import start_mqtt, stop_mqtt, get_status
 import os
 import json
 import logging
@@ -10,6 +10,9 @@ from backend.log_helper import logger, LOG_PATH
 from dotenv import set_key
 from datetime import datetime
 
+from backend import log_helper
+logger = log_helper.logger
+logger.debug("Flask-App startet...")
 
 
 app = Flask(__name__)
@@ -76,6 +79,11 @@ def format_datetime(value, format="%d.%m.%Y %H:%M:%S"):
     except Exception:
         return value  # falls es kein ISO-Format ist, Original zurückgeben
 
+@app.route("/api/alarms")
+def api_alarms():
+    db.cursor.execute("SELECT id, timestamp, keyword, city, street, house FROM alarme ORDER BY id DESC LIMIT 100")
+    alarms = db.cursor.fetchall()
+    return {"alarms": [dict(row) for row in alarms]}
 
 # === Logs ===
 @app.route("/logs")
@@ -98,10 +106,11 @@ def clear_logs():
 def api_logs():
     if os.path.exists(LOG_PATH):
         with open(LOG_PATH, "r", encoding="utf-8") as f:
-            log_content = f.read()
+            lines = f.readlines()
+        lines.reverse()  # neueste zuerst
+        return "".join(lines)
     else:
-        log_content = "Keine Logdatei gefunden."
-    return log_content
+        return "Keine Logdatei gefunden."
 
 @app.route("/set_log_level", methods=["POST"])
 def set_log_level():
@@ -138,6 +147,11 @@ def clear_status():
     flash("Alle Fahrzeugstatus wurden gelöscht.", "success")
     return redirect(url_for("status"))
 
+@app.route("/api/status")
+def api_status():
+    db.cursor.execute("SELECT timestamp, fahrzeug, status FROM fahrzeuglog ORDER BY timestamp DESC LIMIT 100")
+    rows = db.cursor.fetchall()
+    return {"statuses": [dict(timestamp=row[0], fahrzeug=row[1], status=row[2]) for row in rows]}
 
 # === Einstellungen ===
 @app.route("/settings", methods=["GET"])
@@ -199,6 +213,11 @@ def mqtt_start():
 def mqtt_stop():
     stop_mqtt()
     return redirect(url_for("alarms"))
+
+@app.route("/api/mqtt_status")
+def api_mqtt_status():
+    return {"running": get_status()}
+
 
 # === Tokens Editor ===
 @app.route("/tokens")
