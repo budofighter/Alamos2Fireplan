@@ -27,7 +27,7 @@ def create_default_env():
                 "EXTERNE_API_URL=\n"
                 "EXTERNE_API_TOKEN=\n"
             )
-        logger.info("🆕 .env-Datei mit Platzhaltern erstellt.")
+        logger.info(".env-Datei mit Platzhaltern erstellt.")
 
 # Nur beim allerersten Start ausführen
 create_default_env()
@@ -37,7 +37,7 @@ FS_TOKEN_PATH = os.path.join("config", "fs_api_tokens.json")
 if not os.path.exists(FS_TOKEN_PATH):
     with open(FS_TOKEN_PATH, "w", encoding="utf-8") as f:
         json.dump([], f, indent=2)
-    logger.info("🆕 fs_api_tokens.json erstellt (leer).")
+    logger.info("fs_api_tokens.json erstellt (leer).")
 
 # Jetzt sicher laden
 load_dotenv(dotenv_path=ENV_PATH)

@@ -1,7 +1,7 @@
 
 # Alamos2Fireplan
 
-Ein leichtgewichtiges Python-basiertes Tool zur Verarbeitung von Alarm- und Statusdaten aus Alamos, mit Weiterleitung an Fireplan, Feuersoftware oder externe APIs. Das Tool läuft als Windows-Dienst und bietet eine Weboberfläche zur Verwaltung.
+Ein kleines Python-basiertes Tool zur Verarbeitung von Alarm- und Statusdaten aus Alamos, mit Weiterleitung an Fireplan, Feuersoftware oder externe APIs. Das Tool läuft als Windows-Dienst und bietet eine Weboberfläche zur Verwaltung.
 
 ---
 
