@@ -35,7 +35,7 @@ Alamos2Fireplan/
 
 ## Schnellstart
 
-1. **Installation starten:**
+1. **Installation starten (als Admin):**
 
    ```
    install.bat
