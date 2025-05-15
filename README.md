@@ -41,7 +41,7 @@ Alamos2Fireplan/
    install.bat
    ```
    
-Startpasswort: `112112`
+   Startpasswort: `112112`
 
 
 
