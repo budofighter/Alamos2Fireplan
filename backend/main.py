@@ -18,15 +18,28 @@ fp = Fireplan()
 # === ALARMHANDLING ===
 def handle_alarm(data):
     try:
-        if data.get("type") != "ALARM":
-            logger.info("Kein ALARM-Typ – ignoriert.")
+        if not data or data.get("type") != "ALARM":
+            logger.info("Kein ALARM-Typ oder leere Daten – ignoriert.")
             return
 
-        d = data.get("data", {})
-        loc = d.get("location", {})
-        custom = d.get("custom", {})
+        d = data.get("data")
+        if not d:
+            logger.warning("ALARM erhalten, aber kein 'data'-Inhalt vorhanden – abgebrochen.")
+            return
 
         external_id = d.get("externalId")
+        if not external_id:
+            logger.warning("ALARM erhalten, aber ohne 'externalId' – abgebrochen.")
+            return
+
+        loc = d.get("location", {})
+        if not loc.get("city"):
+            loc["city"] = "Unbekannt"
+            logger.warning(f"[ALARM] Ort fehlt in Alarm (external_id={external_id}) – 'Unbekannt' verwendet.")
+
+        custom = d.get("custom", {})
+
+
         ise_codes_raw = custom.get("COBRA_DEVICE_alerted_codes", "")
         ise_list = [code.strip() for code in ise_codes_raw.split(";") if code.strip()]
 
