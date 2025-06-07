@@ -7,6 +7,9 @@ from werkzeug.security import generate_password_hash
 
 ENV_PATH = os.path.join("config", ".env")
 
+# Aktuelle App Version
+APP_VERSION = "2.0.4"
+
 def create_default_env():
     # Nur erstellen, wenn die Datei NICHT existiert
     if not os.path.isfile(ENV_PATH):
@@ -42,6 +45,13 @@ if not os.path.exists(FS_TOKEN_PATH):
         json.dump([], f, indent=2)
     logger.info("fs_api_tokens.json erstellt (leer).")
 
+# === RIC-Mapping-Datei automatisch anlegen ===
+RIC_MAP_PATH = os.path.join("config", "ric_map.json")
+if not os.path.exists(RIC_MAP_PATH):
+    with open(RIC_MAP_PATH, "w", encoding="utf-8") as f:
+        json.dump({}, f, indent=2)
+    logger.info("ric_map.json erstellt (leer).")
+
 # Jetzt sicher laden
 load_dotenv(dotenv_path=ENV_PATH)
 
@@ -56,7 +66,6 @@ MQTT_PASSWORD = os.getenv("MQTT_PASSWORD")
 FIREPLAN_API_URL = os.getenv("FIREPLAN_API_URL")
 FIREPLAN_SECRET = os.getenv("FIREPLAN_SECRET")
 FIREPLAN_DIVISION = os.getenv("FIREPLAN_DIVISION")
-APP_VERSION = "2.0.3"
 
 AUSWERTUNG_FIREPLAN = os.getenv("AUSWERTUNG_FIREPLAN", "True")
 AUSWERTUNG_FEUERSOFTWARE = os.getenv("AUSWERTUNG_FEUERSOFTWARE", "False")
