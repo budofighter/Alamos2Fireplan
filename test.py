@@ -1,2 +1,0 @@
-from werkzeug.security import check_password_hash
-print(check_password_hash("scrypt:32768:8:1$F0rkRFGzhhmjjl1P$6c83b76ab53621ba6694f3315c00155feb696d1f8358324458177076012ed9132604bffd3046f399e9d803255412882152db2eff3ff041c09cb7184cb10656c9", "112112"))
