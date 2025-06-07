@@ -8,7 +8,7 @@ from werkzeug.security import generate_password_hash
 ENV_PATH = os.path.join("config", ".env")
 
 # Aktuelle App Version
-APP_VERSION = "2.0.4"
+APP_VERSION = "2.0.7"
 
 def create_default_env():
     # Nur erstellen, wenn die Datei NICHT existiert
