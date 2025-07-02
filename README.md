@@ -31,37 +31,19 @@ Alamos2Fireplan/
 ├── requirements.txt    # Abhängigkeiten
 ```
 
----
-
-## Schnellstart
-
-1. **Installation starten (als Admin):**
-
-   ```
-   install.bat
-   ```
-   
-   Startpasswort: `112112`
-
-
-
-2. **Weboberfläche aufrufen:**
-
-   ```
-   http://localhost:5000
-   ```
-
-3. **Dienst läuft automatisch nach Systemstart**, auch ohne Benutzeranmeldung
-
----
 
 ## Dokumentation
 
+Bitte bei Erstinstataion komplett durcharbeiten!
+
 | Thema                       | Datei                         |
 | --------------------------- | ----------------------------- |
-| Installationsanleitung      | [Installationsanleitung](https://github.com/budofighter/Alamos2Fireplan/wiki/2.-Installationsanleitung)  |
-| Konfiguration von Systemen  | [Konfiguration](https://github.com/budofighter/Alamos2Fireplan/wiki/3.-Konfiguration) |
-| Mosquitto MQTT-Broker Setup | [Einrichtung von Mosquitto (MQTT-Broker)](https://github.com/budofighter/Alamos2Fireplan/wiki/1.-Mosquitto-MQTT%E2%80%90Broker-%E2%80%93-Installation-&-Konfiguration-(Windows)) |
+| Mosquitto MQTT Broker       | [1. Mosquitto MQTT‐Broker – Installation & Konfiguration (Windows)](https://github.com/budofighter/Alamos2Fireplan/wiki/1.-Mosquitto-MQTT%E2%80%90Broker-%E2%80%93-Installation-&-Konfiguration-(Windows))   |
+| Installationsanleitung      | [2. Installationsanleitung Alamos2Fireplan](https://github.com/budofighter/Alamos2Fireplan/wiki/2.-Installationsanleitung-Alamos2Fireplan)  |
+| Konfiguration der Systeme  | [3. Konfiguration Alamos, Fireplan, Feuersoftware](https://github.com/budofighter/Alamos2Fireplan/wiki/3.-Konfiguration) |
+| Grundeinstellung Alamos2Fireplan | [4. Einstellungen Alamos2Fireplan](https://github.com/budofighter/Alamos2Fireplan/wiki/4.-Einstellungen-Alamos2Fireplan) |
+
+
 
 ---
 
@@ -77,7 +59,6 @@ Alamos2Fireplan/
 
 * Vermeide anonyme MQTT-Verbindungen (siehe \[Mosquitto\_Installation.md])
 * Verwende möglichst TLS-Verschlüsselung in Produktivumgebungen
-* Zugangsdaten werden in `.env` gespeichert → Dateizugriff absichern
 
 ---
 
