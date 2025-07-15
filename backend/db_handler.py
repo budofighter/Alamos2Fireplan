@@ -30,6 +30,7 @@ class DBHandler:
             "postal_code": "TEXT",
             "city": "TEXT",
             "city_abbr": "TEXT",
+            "COBRA_LOCATION_property": "TEXT",
             "units": "TEXT",
             "vehicles": "TEXT",
             "alarmed_time": "TEXT",
@@ -77,7 +78,7 @@ class DBHandler:
                 self.cursor.execute('''
                     UPDATE alarme SET
                         timestamp=?, keyword=?, keyword_description=?, message=?,
-                        building=?, street=?, house=?, postal_code=?, city=?, city_abbr=?,
+                        building=?, street=?, house=?, postal_code=?, city=?, city_abbr=?, COBRA_LOCATION_property=?,
                         units=?, vehicles=?, alarmed_time=?, coordinate=?,
                         custom_comment=?, custom_diagnosis=?, custom_alerted=?, custom_alerted_semicolon=?,
                         custom_alerted_codes=?, custom_alerted_rics=?, custom_alarm_state=?,
@@ -94,6 +95,7 @@ class DBHandler:
                     alarm_data.get("postalCode"),
                     alarm_data.get("city"),
                     alarm_data.get("city_abbr"),
+                    alarm_data.get("COBRA_LOCATION_property"),
                     alarm_data.get("units"),
                     alarm_data.get("vehicles"),
                     alarm_data.get("alarmedTime"),
@@ -114,12 +116,12 @@ class DBHandler:
                 self.cursor.execute('''
                     INSERT INTO alarme (
                         timestamp, external_id, keyword, keyword_description, message,
-                        building, street, house, postal_code, city, city_abbr,
+                        building, street, house, postal_code, city, city_abbr, COBRA_LOCATION_property,
                         units, vehicles, alarmed_time, coordinate,
                         custom_comment, custom_diagnosis, custom_alerted, custom_alerted_semicolon,
                         custom_alerted_codes, custom_alerted_rics, custom_alarm_state,
                         update_log, raw_json
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     alarm_data.get("timestamp"),
                     external_id,
@@ -132,6 +134,7 @@ class DBHandler:
                     alarm_data.get("postalCode"),
                     alarm_data.get("city"),
                     alarm_data.get("city_abbr"),
+                    alarm_data.get("COBRA_LOCATION_property"),
                     alarm_data.get("units"),
                     alarm_data.get("vehicles"),
                     alarm_data.get("alarmedTime"),

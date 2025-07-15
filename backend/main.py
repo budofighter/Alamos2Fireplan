@@ -108,6 +108,7 @@ def handle_alarm(data):
             "custom_comment": custom.get("COBRA_comment"),
             "custom_diagnosis": custom.get("COBRA_keyword_diagnosis"),
             "custom_alerted": custom.get("COBRA_DEVICE_alerted"),
+            "COBRA_LOCATION_property": custom.get("COBRA_LOCATION_property"),
             "custom_alerted_semicolon": custom.get("COBRA_DEVICE_alerted_semicolon"),
             "custom_alerted_codes": ise_codes_raw,
             "custom_alerted_rics": ";".join(sorted(existing_rics.union(translated_rics))),
@@ -190,7 +191,7 @@ def build_fireplan_payload(alamos_data):
 
     koord = None
     if isinstance(coord, (list, tuple)) and len(coord) == 2:
-        koord = f"{coord[1]}, {coord[0]}"
+        koord = f"{coord[0]},{coord[1]}"
 
     zusatzinfo_parts = [
         custom.get("COBRA_comment"),
@@ -204,6 +205,7 @@ def build_fireplan_payload(alamos_data):
         "hausnummer": loc.get("house"),
         "ort": loc.get("city"),
         "ortsteil": custom.get("city_abbr"),
+        "objekt": custom.get("COBRA_LOCATION_property"),
         "objektname": loc.get("building"),
         "zusatzinfo": zusatzinfo,
         "einsatznrlst": d.get("externalId"),

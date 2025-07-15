@@ -81,8 +81,8 @@ def post_feuersoftware_alarm(data: dict):
                 "City": loc.get("city")
             },
             "Position": {
-                "Latitude": coord[1] if isinstance(coord, list) and len(coord) == 2 else 0,
-                "Longitude": coord[0] if isinstance(coord, list) and len(coord) == 2 else 0,
+                "Latitude": coord[0] if isinstance(coord, list) and len(coord) == 2 else 0,
+                "Longitude": coord[1] if isinstance(coord, list) and len(coord) == 2 else 0,
             },
             "Ric": ";".join(ric_list),
             "Number": d.get("externalId"),
