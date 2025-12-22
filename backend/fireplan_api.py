@@ -76,11 +76,12 @@ class Fireplan:
         data["koordinaten"] = self._format_coordinates(data.get("koordinaten"))
 
         # Nur gültige Felder behalten
-        valid = self.validator.validated(data)
+        validator = cerberus.Validator(ALARM_SCHEMA, purge_unknown=True)
+        valid = validator.validated(data)
 
         if not valid:
             logger.error("[Fireplan] Ungültige Alarmdaten – Validierung fehlgeschlagen:")
-            logger.error(self.validator.errors)
+            logger.error(validator.errors)
             return
         else:
             logger.debug("[Fireplan] Alarmdaten erfolgreich validiert.")

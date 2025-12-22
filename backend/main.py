@@ -7,6 +7,8 @@ from backend.fireplan_api import Fireplan
 from backend.feuersoftware_api import post_fahrzeug_status, post_feuersoftware_alarm
 from backend.extern_api import post_externer_status
 from backend.log_helper import logger
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
 
 # .env laden
 load_dotenv(dotenv_path=os.path.join("config", ".env"))
@@ -44,8 +46,10 @@ def handle_alarm(data):
         ise_list = [code.strip() for code in ise_codes_raw.split(";") if code.strip()]
 
         ric_map = load_ric_map()
-        translated_rics = set(ric_map.get(code) for code in ise_list if code in ric_map)
-
+        translated_rics = {
+            ric for code in ise_list
+            if (ric := ric_map.get(code))
+        }
         db.cursor.execute("SELECT custom_alerted_rics, update_log FROM alarme WHERE external_id = ?", (external_id,))
         row = db.cursor.fetchone()
 
@@ -58,17 +62,27 @@ def handle_alarm(data):
             existing_rics = set()
             new_rics = translated_rics
 
+        def _send_fireplan_for_ric(ric: str):
+            payload = build_fireplan_payload(data)
+            payload["ric"] = ric
+            fp.alarm(payload)  # fp.alarm loggt intern Erfolg/Fehler bereits
+            return ric
+
         if new_rics:
             logger.info(f"✅ Neue RICs zu alarmieren: {new_rics}")
             if os.getenv("AUSWERTUNG_FIREPLAN", "False") == "True":
-                for ric in new_rics:
-                    payload_copy = build_fireplan_payload(data)
-                    payload_copy["ric"] = ric
-                    try:
-                        fp.alarm(payload_copy)
-                        logger.info(f"🚨 Alarm an Fireplan für RIC {ric}")
-                    except Exception as e:
-                        logger.warning(f"[Fireplan] Fehler: {e}")
+                # Parallel pro RIC senden (I/O-bound)
+                max_workers = min(8, max(1, len(new_rics)))  # begrenzen, aber dynamisch
+                with ThreadPoolExecutor(max_workers=max_workers) as ex:
+                    futures = {ex.submit(_send_fireplan_for_ric, ric): ric for ric in new_rics}
+
+                    for fut in as_completed(futures):
+                        ric = futures[fut]
+                        try:
+                            fut.result()
+                            logger.info(f"🚨 Alarm an Fireplan für RIC {ric}")
+                        except Exception as e:
+                            logger.warning(f"[Fireplan] Fehler bei RIC {ric}: {e}")
 
             if os.getenv("AUSWERTUNG_FEUERSOFTWARE", "False") == "True":
                 custom["COBRA_DEVICE_alerted_codes_translated"] = ";".join(new_rics)
@@ -191,7 +205,7 @@ def build_fireplan_payload(alamos_data):
 
     koord = None
     if isinstance(coord, (list, tuple)) and len(coord) == 2:
-        koord = f"{coord[0]},{coord[1]}"
+        koord = f"{coord[1]},{coord[0]}"
 
     zusatzinfo_parts = [
         custom.get("COBRA_comment"),
