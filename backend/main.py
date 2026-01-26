@@ -36,7 +36,7 @@ def handle_alarm(data):
 
         loc = d.get("location", {})
         if not loc.get("city"):
-            loc["city"] = "Unbekannt"
+            loc["city"] = ""
             logger.warning(f"[ALARM] Ort fehlt in Alarm (external_id={external_id}) – 'Unbekannt' verwendet.")
 
         custom = d.get("custom", {})
@@ -214,15 +214,15 @@ def build_fireplan_payload(alamos_data):
     zusatzinfo = " – ".join(filter(None, zusatzinfo_parts))
 
     return {
-        "einsatzstichwort": d.get("keyword_description"),
-        "strasse": loc.get("street"),
-        "hausnummer": loc.get("house"),
-        "ort": loc.get("city"),
-        "ortsteil": custom.get("city_abbr"),
-        "objekt": custom.get("COBRA_LOCATION_property"),
-        "objektname": loc.get("building"),
-        "zusatzinfo": zusatzinfo,
-        "einsatznrlst": d.get("externalId"),
+        "einsatzstichwort": d.get("keyword_description") or "",
+        "strasse": loc.get("street") or "",
+        "hausnummer": loc.get("house") or "",
+        "ort": loc.get("city") or "",
+        "ortsteil": custom.get("city_abbr") or "",
+        "objekt": custom.get("COBRA_LOCATION_property") or "",
+        "objektname": loc.get("building") or "",
+        "zusatzinfo": zusatzinfo or "",
+        "einsatznrlst": d.get("externalId") or "",
         "koordinaten": koord,
         "ric": ric_string,
         "subRIC": "A"
