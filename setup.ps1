@@ -86,8 +86,83 @@ function Assert-ServiceStarted {
     Write-Log "Dienst '$ServiceName' läuft."
 }
 
-# Temporärer Stub — wird in Task 8 ersetzt.
-function Setup-Mosquitto { Write-Log 'Mosquitto-Setup wird in Task 8 implementiert.' }
+function Setup-Mosquitto {
+    try {
+        $mosqDir = 'C:\Program Files\mosquitto'
+        $mosqExe = Join-Path $mosqDir 'mosquitto.exe'
+        $mosqPw  = Join-Path $mosqDir 'mosquitto_passwd.exe'
+
+        # 1. Installieren, falls nicht vorhanden
+        if (-not (Test-Path -LiteralPath $mosqExe)) {
+            $installer = Join-Path $env:TEMP "mosquitto-install.exe"
+            Write-Log "Lade Mosquitto herunter: $MosqUrl"
+            Invoke-WebRequest -Uri $MosqUrl -OutFile $installer
+            Write-Log 'Installiere Mosquitto (silent)...'
+            Start-Process -FilePath $installer -ArgumentList '/S' -Wait
+        } else {
+            Write-Log 'Mosquitto bereits installiert – nur Neukonfiguration.'
+        }
+
+        # 2. Credentials abfragen
+        $user = Read-Host 'MQTT-Benutzername'
+        $secure = Read-Host 'MQTT-Passwort' -AsSecureString
+        $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+        $pass = [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+
+        # 3. pwfile anlegen (Pfad ohne Leerzeichen)
+        $pwDir = Split-Path $PwFile -Parent
+        if (-not (Test-Path -LiteralPath $pwDir)) { New-Item -ItemType Directory -Path $pwDir -Force | Out-Null }
+        & $mosqPw -b -c $PwFile $user $pass
+        if ($LASTEXITCODE -ne 0) { throw "mosquitto_passwd schlug fehl (Code $LASTEXITCODE)." }
+        Write-Log "MQTT-Benutzer '$user' angelegt."
+
+        # 4. mosquitto.conf schreiben
+        $conf = @(
+            'allow_anonymous false',
+            "password_file $PwFile",
+            'listener 1883'
+        )
+        Set-Content -LiteralPath (Join-Path $mosqDir 'mosquitto.conf') -Value $conf -Encoding UTF8
+        Write-Log 'mosquitto.conf geschrieben.'
+
+        # 5. Dienst sicherstellen + neu starten
+        if (-not (Get-Service -Name 'mosquitto' -ErrorAction SilentlyContinue)) {
+            & $mosqExe install | Out-Null
+        }
+        Restart-Service -Name 'mosquitto' -ErrorAction SilentlyContinue
+        Start-Service -Name 'mosquitto' -ErrorAction SilentlyContinue
+        Write-Log 'Mosquitto-Dienst gestartet.'
+
+        # 6. config/.env sicherstellen und MQTT-Schlüssel synchronisieren
+        Push-Location $ProjectDir
+        try { & $PythonExe -c 'import config' | Out-Null } finally { Pop-Location }
+        $envPath = Join-Path $ProjectDir 'config\.env'
+        Update-EnvFile -Path $envPath -Values @{
+            MQTT_BROKER   = '127.0.0.1'
+            MQTT_PORT     = '1883'
+            MQTT_USERNAME = $user
+            MQTT_PASSWORD = $pass
+        } | Out-Null
+        Write-Log 'MQTT-Zugangsdaten in config/.env übernommen.'
+
+        # 7. Firewall optional
+        $fw = Read-Host 'Port 1883 in der Firewall freigeben (Zugriff von anderem Rechner)? (j/n)'
+        if ($fw -match '^(j|J)') {
+            New-NetFirewallRule -DisplayName 'Mosquitto MQTT 1883' -Direction Inbound `
+                -Protocol TCP -LocalPort 1883 -Action Allow -ErrorAction SilentlyContinue | Out-Null
+            Write-Log 'Firewall-Regel für Port 1883 angelegt.'
+        }
+
+        # 8. Abschlusshinweis
+        Write-Log "FERTIG. MQTT-Zugang: Benutzer '$user' / Broker 127.0.0.1:1883."
+        Write-Host "WICHTIG: Diese Zugangsdaten auch in Alamos eintragen (Benutzer: $user)." -ForegroundColor Cyan
+    }
+    catch {
+        Write-Log "Mosquitto-Setup fehlgeschlagen: $($_.Exception.Message)" 'WARN'
+        Write-Log 'Die Alamos2Fireplan-Installation läuft trotzdem weiter.' 'WARN'
+    }
+}
 
 function Invoke-Install {
     Assert-Admin
