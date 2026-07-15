@@ -11,6 +11,7 @@ from backend.main import handle_alarm
 from backend.log_helper import logger, LOG_PATH
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
+from config import APP_VERSION
 
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
@@ -18,6 +19,11 @@ db = DBHandler()
 ENV_PATH = os.path.join("config", ".env")
 load_dotenv(dotenv_path=ENV_PATH)
 logger.debug("Flask-App startet...")
+
+@app.context_processor
+def inject_version():
+    # Macht die App-Version in allen Templates als {{ app_version }} verfügbar
+    return {"app_version": APP_VERSION}
 
 def login_required(f):
     @wraps(f)
