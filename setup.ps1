@@ -103,12 +103,70 @@ function Invoke-Install {
     Write-Log "Installation abgeschlossen. Weboberfläche: http://localhost:5000"
 }
 
+function Get-ServiceDir {
+    $nssm = Get-Nssm
+    $dir = (& $nssm get $ServiceName AppDirectory) 2>$null
+    $dir = "$dir".Trim()
+    if ([string]::IsNullOrWhiteSpace($dir)) {
+        throw "Dienst '$ServiceName' nicht gefunden. Bitte zuerst install.bat ausführen."
+    }
+    return $dir
+}
+
+function Invoke-Update {
+    Assert-Admin
+    $target = Get-ServiceDir
+    Write-Log "Update-Ziel automatisch erkannt: $target"
+    $nssm = Get-Nssm
+
+    Write-Log 'Stoppe Dienst für Update...'
+    & $nssm stop $ServiceName | Out-Null
+    Start-Sleep -Seconds 2
+
+    # --- Backup ---
+    $targetItems = Get-ChildItem -LiteralPath $target -Force | Select-Object -ExpandProperty Name
+    $backupItems = Get-BackupItems -TargetItems $targetItems
+    $backupDir = Join-Path (Join-Path $target 'backups') (Get-BackupFolderName -Timestamp (Get-Date))
+    New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
+    foreach ($item in $backupItems) {
+        Copy-Item -LiteralPath (Join-Path $target $item) -Destination $backupDir -Recurse -Force
+    }
+    Write-Log "Backup erstellt: $backupDir (Elemente: $($backupItems -join ', '))"
+
+    # --- Code kopieren (nur Allowlist) ---
+    $sourceItems = Get-ChildItem -LiteralPath $ProjectDir -Force | Select-Object -ExpandProperty Name
+    $copyPlan = Get-UpdateCopyPlan -SourceItems $sourceItems
+    foreach ($item in $copyPlan) {
+        $src = Join-Path $ProjectDir $item
+        $dst = Join-Path $target $item
+        if (Test-Path -LiteralPath $src -PathType Container) {
+            Copy-Item -LiteralPath $src -Destination $dst -Recurse -Force
+        } else {
+            Copy-Item -LiteralPath $src -Destination $dst -Force
+        }
+    }
+    Write-Log "Code aktualisiert (Elemente: $($copyPlan -join ', '))."
+
+    # --- Abhängigkeiten aktualisieren ---
+    $targetPython = Join-Path $target 'tools\python\python.exe'
+    $reqs = Join-Path $target 'requirements.txt'
+    if ((Test-Path -LiteralPath $targetPython) -and (Test-Path -LiteralPath $reqs)) {
+        & $targetPython -m pip install -r $reqs
+        Write-Log 'Python-Abhängigkeiten aktualisiert.'
+    }
+
+    & $nssm start $ServiceName | Out-Null
+    Start-Sleep -Seconds 2
+    Assert-ServiceStarted
+    Write-Log 'Update abgeschlossen.'
+}
+
 # ---- Dispatch (Platzhalter, in Folgetasks gefüllt) ----
 try {
     Write-Log "setup.ps1 gestartet im Modus '$Mode'."
     switch ($Mode) {
         'install'   { Invoke-Install }
-        'update'    { Write-Log 'Update-Flow folgt in Task 6.' }
+        'update'    { Invoke-Update }
         'uninstall' { Write-Log 'Uninstall-Flow folgt in Task 7.' }
     }
     exit 0
