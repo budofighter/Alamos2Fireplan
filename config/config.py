@@ -8,8 +8,9 @@ from werkzeug.security import generate_password_hash
 
 ENV_PATH = os.path.join("config", ".env")
 
-# Aktuelle App Version
-APP_VERSION = "2.2.0"
+# HINWEIS: Die App-Version liegt bewusst in backend/version.py, NICHT hier.
+# config/ wird beim Update nicht ueberschrieben und wuerde sonst eine veraltete
+# Versionsnummer behalten.
 
 def create_default_env():
     # Nur erstellen, wenn die Datei NICHT existiert
