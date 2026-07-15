@@ -36,3 +36,16 @@ function Get-UpdateCopyPlan {
                  'setup.ps1','setup.lib.ps1','install.bat','update.bat','uninstall.bat')
     return @($SourceItems | Where-Object { $include -contains $_ })
 }
+
+function Get-BackupItems {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string[]]$TargetItems)
+    $backup = @('config','alarme.db','logs')
+    return @($TargetItems | Where-Object { $backup -contains $_ })
+}
+
+function Get-BackupFolderName {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][datetime]$Timestamp)
+    return 'backup_' + $Timestamp.ToString('yyyyMMdd-HHmmss')
+}

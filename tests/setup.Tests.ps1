@@ -44,3 +44,22 @@ Describe 'Get-UpdateCopyPlan' {
         $plan | Should -Not -Contain '.env'
     }
 }
+
+Describe 'Get-BackupItems' {
+    It 'wählt nur vorhandene schützenswerte Elemente' {
+        $items = @('app','config','alarme.db','logs','backups','runserver.py')
+        $backup = Get-BackupItems -TargetItems $items
+        $backup | Should -Contain 'config'
+        $backup | Should -Contain 'alarme.db'
+        $backup | Should -Contain 'logs'
+        $backup | Should -Not -Contain 'app'
+        $backup | Should -Not -Contain 'backups'
+    }
+}
+
+Describe 'Get-BackupFolderName' {
+    It 'formatiert den Zeitstempel deterministisch' {
+        $ts = [datetime]'2026-07-15T13:05:09'
+        Get-BackupFolderName -Timestamp $ts | Should -Be 'backup_20260715-130509'
+    }
+}
