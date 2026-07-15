@@ -11,7 +11,7 @@ from backend.main import handle_alarm
 from backend.log_helper import logger, LOG_PATH
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
-from config import APP_VERSION
+from backend.version import APP_VERSION
 import secrets
 
 app = Flask(__name__)
