@@ -1,0 +1,8 @@
+# Windows-Batchdateien müssen CRLF-Zeilenenden haben.
+# Mit `chcp 65001` verarbeitet cmd.exe LF-terminierte .bat fehlerhaft
+# (verschluckt das erste Zeichen von Befehlen). CRLF erzwingen — unabhängig
+# von der lokalen core.autocrlf-Einstellung des Klons.
+*.bat text eol=crlf
+
+# PowerShell-Skripte ebenfalls konsistent mit CRLF auf Windows.
+*.ps1 text eol=crlf
