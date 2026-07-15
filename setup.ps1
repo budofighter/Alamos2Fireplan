@@ -161,13 +161,36 @@ function Invoke-Update {
     Write-Log 'Update abgeschlossen.'
 }
 
+function Invoke-Uninstall {
+    Assert-Admin
+    $confirm = Read-Host "Dienst '$ServiceName' wirklich entfernen? (j/n)"
+    if ($confirm -notmatch '^(j|J)') { Write-Log 'Deinstallation abgebrochen.'; return }
+
+    Remove-Service
+    Write-Log "Dienst '$ServiceName' entfernt."
+
+    $delPy = Read-Host 'Gebündeltes Python (tools\python) löschen? (j/n)'
+    if ($delPy -match '^(j|J)') {
+        $py = Join-Path $ProjectDir 'tools\python'
+        if (Test-Path -LiteralPath $py) { Remove-Item -LiteralPath $py -Recurse -Force; Write-Log 'tools\python gelöscht.' }
+    }
+
+    $delBk = Read-Host 'Backups (backups\) löschen? (j/n)'
+    if ($delBk -match '^(j|J)') {
+        $bk = Join-Path $ProjectDir 'backups'
+        if (Test-Path -LiteralPath $bk) { Remove-Item -LiteralPath $bk -Recurse -Force; Write-Log 'backups gelöscht.' }
+    }
+
+    Write-Log 'Mosquitto wurde NICHT entfernt. Bei Bedarf manuell über die Windows-Programme deinstallieren.'
+}
+
 # ---- Dispatch (Platzhalter, in Folgetasks gefüllt) ----
 try {
     Write-Log "setup.ps1 gestartet im Modus '$Mode'."
     switch ($Mode) {
         'install'   { Invoke-Install }
         'update'    { Invoke-Update }
-        'uninstall' { Write-Log 'Uninstall-Flow folgt in Task 7.' }
+        'uninstall' { Invoke-Uninstall }
     }
     exit 0
 }
