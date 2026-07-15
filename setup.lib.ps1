@@ -28,3 +28,11 @@ function Update-EnvFile {
     Set-Content -LiteralPath $Path -Value $result -Encoding UTF8
     return $result.ToArray()
 }
+
+function Get-UpdateCopyPlan {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string[]]$SourceItems)
+    $include = @('app','backend','tools','runserver.py','requirements.txt',
+                 'setup.ps1','setup.lib.ps1','install.bat','update.bat','uninstall.bat')
+    return @($SourceItems | Where-Object { $include -contains $_ })
+}

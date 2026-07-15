@@ -26,3 +26,21 @@ Describe 'Update-EnvFile' {
         (Test-Path $tmp) | Should -BeTrue
     }
 }
+
+Describe 'Get-UpdateCopyPlan' {
+    It 'behält nur Code-Elemente und schließt Daten aus' {
+        $items = @('app','backend','tools','runserver.py','requirements.txt',
+                   'setup.ps1','setup.lib.ps1','install.bat','update.bat','uninstall.bat',
+                   'config','alarme.db','logs','backups','.env','README.md')
+        $plan = Get-UpdateCopyPlan -SourceItems $items
+
+        $plan | Should -Contain 'app'
+        $plan | Should -Contain 'backend'
+        $plan | Should -Contain 'setup.ps1'
+        $plan | Should -Not -Contain 'config'
+        $plan | Should -Not -Contain 'alarme.db'
+        $plan | Should -Not -Contain 'logs'
+        $plan | Should -Not -Contain 'backups'
+        $plan | Should -Not -Contain '.env'
+    }
+}
