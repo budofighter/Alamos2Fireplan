@@ -205,6 +205,15 @@ function Invoke-Update {
     $target = Get-ServiceDir
     Write-Log "Update-Ziel automatisch erkannt: $target"
 
+    # Same-Dir-Schutz: update.bat muss aus der NEUEN, separat entpackten Version
+    # laufen, nicht aus dem installierten Ordner selbst (sonst würde eine Datei
+    # auf sich selbst kopiert). Prüfen, bevor der Dienst gestoppt wird.
+    $srcResolved = (Resolve-Path -LiteralPath $ProjectDir).Path.TrimEnd('\')
+    $dstResolved = (Resolve-Path -LiteralPath $target).Path.TrimEnd('\')
+    if ($srcResolved -ieq $dstResolved) {
+        throw "update.bat läuft aus dem installierten Ordner selbst ($target). Bitte die NEUE Version in einen ANDEREN Ordner entpacken und update.bat von dort starten."
+    }
+
     Write-Log 'Stoppe Dienst für Update...'
     Invoke-Nssm stop $ServiceName | Out-Null
     Start-Sleep -Seconds 2
