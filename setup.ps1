@@ -52,13 +52,20 @@ function Invoke-Nssm {
     #     $LASTEXITCODE, nicht ueber Exceptions.
     # -NssmPath: explizite nssm.exe (fuer die Registrierung mit der Ziel-nssm,
     # damit die Dienst-Binaerdatei im Installationsordner liegt).
+    # WICHTIG: $NssmArgs hat Position 0 (ValueFromRemainingArguments), damit
+    # positionelle Aufrufe wie 'Invoke-Nssm get <svc> AppDirectory' NICHT ihr
+    # erstes Wort an $NssmPath binden. $NssmPath ist dadurch nur benannt nutzbar.
     param(
-        [string]$NssmPath,
-        [Parameter(ValueFromRemainingArguments = $true)][string[]]$NssmArgs
+        [Parameter(Position = 0, ValueFromRemainingArguments = $true)][string[]]$NssmArgs,
+        [string]$NssmPath
     )
     $nssm = if ($NssmPath) { $NssmPath } else { Get-Nssm }
+    # EAP=Continue: nssm-stderr wird KEIN terminierender Fehler. Nur stdout
+    # auswerten (2>$null), damit nssm-Fehlermeldungen die Ausgabe (z. B. den
+    # AppDirectory-Pfad oder SERVICE_RUNNING) nicht verschmutzen. Echte Fehler
+    # erkennt der Aufrufer ueber $LASTEXITCODE.
     $ErrorActionPreference = 'Continue'
-    $raw = & $nssm @NssmArgs 2>&1 | Out-String
+    $raw = & $nssm @NssmArgs 2>$null | Out-String
     return (Clear-NssmString -Text $raw)
 }
 
@@ -322,15 +329,19 @@ function Invoke-Uninstall {
 }
 
 # ---- Dispatch ----
-try {
-    Write-Log "setup.ps1 gestartet im Modus '$Mode'."
-    switch ($Mode) {
-        'install'   { Invoke-Setup }
-        'uninstall' { Invoke-Uninstall }
+# Nur ausfuehren, wenn das Skript direkt gestartet wird (nicht beim Dot-Sourcing
+# durch Tests). Beim Dot-Sourcing ist InvocationName '.'.
+if ($MyInvocation.InvocationName -ne '.') {
+    try {
+        Write-Log "setup.ps1 gestartet im Modus '$Mode'."
+        switch ($Mode) {
+            'install'   { Invoke-Setup }
+            'uninstall' { Invoke-Uninstall }
+        }
+        exit 0
     }
-    exit 0
-}
-catch {
-    Write-Log $_.Exception.Message 'ERROR'
-    exit 1
+    catch {
+        Write-Log $_.Exception.Message 'ERROR'
+        exit 1
+    }
 }
