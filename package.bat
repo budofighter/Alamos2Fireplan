@@ -50,9 +50,13 @@ powershell -NoProfile -Command "try { Expand-Archive -Path '%TEMP_FOLDER%\py.zip
 if errorlevel 1 (set "ERRMSG=Entpacken des Embeddable-Python-Archivs fehlgeschlagen." & goto :fail)
 del "%TEMP_FOLDER%\py.zip" >nul
 
-:: ._pth: 'import site' aktivieren (sonst findet Python die site-packages nicht)
-powershell -NoProfile -Command "try { $p = Get-ChildItem '%TEMP_FOLDER%\tools\python\python*._pth' | Select-Object -First 1; if (-not $p) { exit 1 }; (Get-Content $p.FullName) -replace '#\s*import site','import site' | Set-Content $p.FullName -Encoding ASCII } catch { exit 1 }"
-if errorlevel 1 (set "ERRMSG=Anpassen der ._pth-Datei (import site) fehlgeschlagen." & goto :fail)
+:: ._pth anpassen: 'import site' aktivieren (fuer site-packages) UND die App-Wurzel
+:: (..\.. relativ zu tools\python) aufnehmen, damit das gebuendelte Python die
+:: lokalen Pakete app/backend/config findet. Ohne diese Zeile bricht runserver.py
+:: mit "ModuleNotFoundError: No module named 'app'" ab (Embeddable-Python legt das
+:: Skriptverzeichnis NICHT automatisch auf sys.path).
+powershell -NoProfile -Command "try { $p = Get-ChildItem '%TEMP_FOLDER%\tools\python\python*._pth' | Select-Object -First 1; if (-not $p) { exit 1 }; $c = (Get-Content $p.FullName) -replace '#\s*import site','import site'; $c += '..\..'; Set-Content -LiteralPath $p.FullName -Value $c -Encoding ASCII } catch { exit 1 }"
+if errorlevel 1 (set "ERRMSG=Anpassen der ._pth-Datei (import site + App-Wurzel) fehlgeschlagen." & goto :fail)
 
 echo [INFO] Richte pip ein ...
 powershell -NoProfile -Command "try { Invoke-WebRequest -Uri '%GETPIP_URL%' -OutFile '%TEMP_FOLDER%\tools\python\get-pip.py' -ErrorAction Stop } catch { exit 1 }"
