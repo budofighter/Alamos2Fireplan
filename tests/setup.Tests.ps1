@@ -63,3 +63,18 @@ Describe 'Get-BackupFolderName' {
         Get-BackupFolderName -Timestamp $ts | Should -Be 'backup_20260715-130509'
     }
 }
+
+Describe 'Clear-NssmString' {
+    It 'entfernt eingestreute NUL-Zeichen und trimmt (nssm UTF-16-Ausgabe)' {
+        $raw = ([char[]]'C:\Users\test' -join "`0") + "`0 "
+        Clear-NssmString -Text $raw | Should -Be 'C:\Users\test'
+    }
+    It 'macht SERVICE_RUNNING wieder matchbar' {
+        $raw = ([char[]]'SERVICE_RUNNING' -join "`0")
+        ($raw -match 'SERVICE_RUNNING') | Should -BeFalse   # roh: nicht matchbar
+        ((Clear-NssmString -Text $raw) -match 'SERVICE_RUNNING') | Should -BeTrue
+    }
+    It 'kommt mit leerer Eingabe klar' {
+        Clear-NssmString -Text '' | Should -Be ''
+    }
+}
