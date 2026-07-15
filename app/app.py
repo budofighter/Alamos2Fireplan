@@ -12,12 +12,23 @@ from backend.log_helper import logger, LOG_PATH
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from config import APP_VERSION
+import secrets
 
 app = Flask(__name__)
-app.secret_key = os.urandom(24)
 db = DBHandler()
 ENV_PATH = os.path.join("config", ".env")
 load_dotenv(dotenv_path=ENV_PATH)
+
+# Persistenter Secret-Key: aus .env lesen; fehlt er, einmalig erzeugen und in
+# .env speichern, damit Login-Sessions einen Dienst-Neustart ueberleben.
+_secret = os.getenv("SECRET_KEY")
+if not _secret:
+    _secret = secrets.token_hex(32)
+    try:
+        set_key(ENV_PATH, "SECRET_KEY", _secret)
+    except Exception as e:
+        logger.warning(f"SECRET_KEY konnte nicht in .env gespeichert werden: {e}")
+app.secret_key = _secret
 logger.debug("Flask-App startet...")
 
 @app.context_processor
@@ -57,15 +68,13 @@ def logout():
 @app.route("/")
 @login_required
 def alarms():
-    db.cursor.execute("SELECT id, timestamp, keyword, city, street, house FROM alarme ORDER BY id DESC LIMIT 100")
-    alarms = db.cursor.fetchall()
+    alarms = db.query_all("SELECT id, timestamp, keyword, city, street, house FROM alarme ORDER BY id DESC LIMIT 100")
     return render_template("alarms.html", alarms=alarms, mqtt_running=get_status())
 
 @app.route("/alarm/<int:alarm_id>")
 @login_required
 def alarm_detail(alarm_id):
-    db.cursor.execute("SELECT * FROM alarme WHERE id = ?", (alarm_id,))
-    alarm = db.cursor.fetchone()
+    alarm = db.query_one("SELECT * FROM alarme WHERE id = ?", (alarm_id,))
     if not alarm:
         flash("Alarm nicht gefunden", "danger")
         return redirect(url_for("alarms"))
@@ -82,8 +91,7 @@ def alarm_detail(alarm_id):
 @app.route("/alarm/<int:alarm_id>/repeat", methods=["POST"])
 @login_required
 def alarm_repeat(alarm_id):
-    db.cursor.execute("SELECT raw_json FROM alarme WHERE id = ?", (alarm_id,))
-    row = db.cursor.fetchone()
+    row = db.query_one("SELECT raw_json FROM alarme WHERE id = ?", (alarm_id,))
     if not row:
         flash("Alarm nicht gefunden", "danger")
         return redirect(url_for("alarms"))
@@ -95,8 +103,7 @@ def alarm_repeat(alarm_id):
 @app.route("/clear_alarms", methods=["POST"])
 @login_required
 def clear_alarms():
-    db.cursor.execute("DELETE FROM alarme")
-    db.conn.commit()
+    db.execute("DELETE FROM alarme")
     flash("Alle Alarme wurden gelöscht.", "success")
     return redirect(url_for("alarms"))
 
@@ -109,9 +116,9 @@ def format_datetime(value, format="%d.%m.%Y %H:%M:%S"):
         return value
 
 @app.route("/api/alarms")
+@login_required
 def api_alarms():
-    db.cursor.execute("SELECT id, timestamp, keyword, city, street, house FROM alarme ORDER BY id DESC LIMIT 100")
-    alarms = db.cursor.fetchall()
+    alarms = db.query_all("SELECT id, timestamp, keyword, city, street, house FROM alarme ORDER BY id DESC LIMIT 100")
     return {"alarms": [dict(row) for row in alarms]}
 
 @app.route("/logs")
@@ -132,6 +139,7 @@ def clear_logs():
     return redirect(url_for("logs_page"))
 
 @app.route("/api/logs")
+@login_required
 def api_logs():
     if os.path.exists(LOG_PATH):
         with open(LOG_PATH, "r", encoding="utf-8") as f:
@@ -141,6 +149,7 @@ def api_logs():
     return "Keine Logdatei gefunden."
 
 @app.route("/set_log_level", methods=["POST"])
+@login_required
 def set_log_level():
     level = request.form.get("log_level", "INFO").upper()
     set_key(ENV_PATH, "LOG_LEVEL", level)
@@ -160,22 +169,21 @@ def download_logs():
 @app.route("/status")
 @login_required
 def status():
-    db.cursor.execute("SELECT timestamp, fahrzeug, status FROM fahrzeuglog ORDER BY timestamp DESC LIMIT 100")
-    statuses = [{"timestamp": row[0], "fahrzeug": row[1], "status": row[2]} for row in db.cursor.fetchall()]
+    rows = db.query_all("SELECT timestamp, fahrzeug, status FROM fahrzeuglog ORDER BY timestamp DESC LIMIT 100")
+    statuses = [{"timestamp": row[0], "fahrzeug": row[1], "status": row[2]} for row in rows]
     return render_template("status.html", statuses=statuses, mqtt_running=get_status())
 
 @app.route("/clear_status", methods=["POST"])
 @login_required
 def clear_status():
-    db.cursor.execute("DELETE FROM fahrzeuglog")
-    db.conn.commit()
+    db.execute("DELETE FROM fahrzeuglog")
     flash("Alle Fahrzeugstatus wurden gelöscht.", "success")
     return redirect(url_for("status"))
 
 @app.route("/api/status")
+@login_required
 def api_status():
-    db.cursor.execute("SELECT timestamp, fahrzeug, status FROM fahrzeuglog ORDER BY timestamp DESC LIMIT 100")
-    rows = db.cursor.fetchall()
+    rows = db.query_all("SELECT timestamp, fahrzeug, status FROM fahrzeuglog ORDER BY timestamp DESC LIMIT 100")
     return {"statuses": [dict(timestamp=row[0], fahrzeug=row[1], status=row[2]) for row in rows]}
 
 @app.route("/settings", methods=["GET"])
@@ -293,16 +301,19 @@ def save_ric_map():
     return redirect(url_for("ric_editor"))
 
 @app.route("/mqtt/start", methods=["POST"])
+@login_required
 def mqtt_start():
     start_mqtt()
     return redirect(url_for("alarms"))
 
 @app.route("/mqtt/stop", methods=["POST"])
+@login_required
 def mqtt_stop():
     stop_mqtt()
     return redirect(url_for("alarms"))
 
 @app.route("/api/mqtt_status")
+@login_required
 def api_mqtt_status():
     return {"running": get_status()}
 
