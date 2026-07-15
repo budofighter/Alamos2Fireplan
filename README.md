@@ -33,12 +33,23 @@ Alamos2Fireplan/
 
 ## Installation & Update (ab v2.1)
 
+Ein Skript für alles: **immer `install.bat`** – es erkennt selbst, ob eine
+Erst-Installation oder ein Update nötig ist.
+
 1. ZIP entpacken (enthält bereits Python – keine separate Python-Installation nötig).
-2. `install.bat` doppelklicken (fragt nach Adminrechten). Optional wird dabei ein
-   lokaler Mosquitto-Broker eingerichtet.
-3. Update: neues ZIP entpacken, `update.bat` doppelklicken – der Installationspfad
-   wird automatisch erkannt, `config/`, `alarme.db` und `logs/` werden vorher gesichert.
-4. Entfernen: `uninstall.bat` doppelklicken.
+2. `install.bat` doppelklicken (fragt nach Adminrechten).
+   - **Erst-Installation:** Die Dateien werden nach `C:\Alamos2Fireplan` kopiert,
+     der Dienst wird registriert und gestartet. Optional wird ein lokaler
+     Mosquitto-Broker eingerichtet.
+   - **Update (Dienst existiert bereits):** Der Dienst wird gestoppt, `config/`,
+     `alarme.db` und `logs/` werden gesichert, nur der Code wird ersetzt
+     (Einstellungen und Datenbank bleiben erhalten), dann startet der Dienst neu.
+3. Für ein Update also einfach die neue Version entpacken und wieder `install.bat`
+   doppelklicken – aus dem **entpackten Ordner**, nicht aus `C:\Alamos2Fireplan`.
+4. Entfernen: `uninstall.bat` doppelklicken (Installationsordner mit Config/DB bleibt
+   erhalten und kann bei Bedarf manuell gelöscht werden).
+
+Die Weboberfläche läuft danach auf `http://localhost:5000`.
 
 
 ## Dokumentation
