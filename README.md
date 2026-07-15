@@ -31,6 +31,15 @@ Alamos2Fireplan/
 ├── requirements.txt    # Abhängigkeiten
 ```
 
+## Installation & Update (ab v2.1)
+
+1. ZIP entpacken (enthält bereits Python – keine separate Python-Installation nötig).
+2. `install.bat` doppelklicken (fragt nach Adminrechten). Optional wird dabei ein
+   lokaler Mosquitto-Broker eingerichtet.
+3. Update: neues ZIP entpacken, `update.bat` doppelklicken – der Installationspfad
+   wird automatisch erkannt, `config/`, `alarme.db` und `logs/` werden vorher gesichert.
+4. Entfernen: `uninstall.bat` doppelklicken.
+
 
 ## Dokumentation
 
