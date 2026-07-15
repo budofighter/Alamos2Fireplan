@@ -92,6 +92,12 @@ class Fireplan:
             logger.debug(f"[Fireplan] Sende Alarmdaten an Fireplan:\n{json.dumps(valid, indent=2, ensure_ascii=False)}")
             response = requests.post(url, headers=headers, json=valid)
 
+            # Token abgelaufen/ungueltig -> einmal neu registrieren und wiederholen
+            if response.status_code in (401, 403):
+                logger.warning(f"[Fireplan] Auth fehlgeschlagen (Code {response.status_code}) - hole neues Token und wiederhole.")
+                self._get_token(self._secret)
+                response = requests.post(url, headers=self.headers, json=valid)
+
             if response.status_code == 200:
                 logger.info("✅ Alarm erfolgreich an Fireplan übermittelt.")
                 if "SUCCESS" in response.text:
@@ -131,6 +137,12 @@ class Fireplan:
 
             logger.debug(f"[Fireplan] Header bei FMS-Status: {headers}")
             response = requests.post(url, headers=headers, json=payload)
+
+            # Token abgelaufen/ungueltig -> einmal neu registrieren und wiederholen
+            if response.status_code in (401, 403):
+                logger.warning(f"[Fireplan] Auth fehlgeschlagen (Code {response.status_code}) - hole neues Token und wiederhole.")
+                self._get_token(self._secret)
+                response = requests.post(url, headers=self.headers, json=payload)
 
             if response.status_code == 200:
                 logger.info(f"[Fireplan] FMS-Status gesendet: {kennung} → {status} ({status_time})")

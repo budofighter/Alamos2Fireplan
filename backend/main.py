@@ -50,8 +50,7 @@ def handle_alarm(data):
             ric for code in ise_list
             if (ric := ric_map.get(code))
         }
-        db.cursor.execute("SELECT custom_alerted_rics, update_log FROM alarme WHERE external_id = ?", (external_id,))
-        row = db.cursor.fetchone()
+        row = db.query_one("SELECT custom_alerted_rics, update_log FROM alarme WHERE external_id = ?", (external_id,))
 
         if row:
             logger.info(f"🔄 Bestehender Alarm gefunden (external_id={external_id})")
@@ -151,11 +150,10 @@ def handle_status_message(message):
         timestamp = datetime.now().isoformat()
 
         logger.info(f"Fahrzeug '{fahrzeug}' hat neuen Status: {status}")
-        db.cursor.execute(
+        db.execute(
             "INSERT INTO fahrzeuglog (timestamp, fahrzeug, status) VALUES (?, ?, ?)",
             (timestamp, fahrzeug, status)
         )
-        db.conn.commit()
 
         if os.getenv("AUSWERTUNG_FIREPLAN", "True") == "True":
             try:

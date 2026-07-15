@@ -32,7 +32,14 @@ class MQTTHandler:
         self.on_disconnect_callback = on_disconnect
         self.on_reconnect_callback = on_reconnect
 
-        self.client = mqtt.Client(client_id=self.client_id, protocol=mqtt.MQTTv311)
+        # paho-mqtt 2.x: Callback-API-Version explizit angeben (sonst
+        # DeprecationWarning). VERSION1 passt zu den on_connect/on_disconnect-
+        # Signaturen unten.
+        self.client = mqtt.Client(
+            mqtt.CallbackAPIVersion.VERSION1,
+            client_id=self.client_id,
+            protocol=mqtt.MQTTv311,
+        )
 
         if self.username and self.password:
             self.client.username_pw_set(self.username, self.password)

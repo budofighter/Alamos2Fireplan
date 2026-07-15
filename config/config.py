@@ -1,5 +1,6 @@
 import os
 import json
+import secrets
 from dotenv import load_dotenv
 from backend.log_helper import logger
 from werkzeug.security import generate_password_hash
@@ -8,7 +9,7 @@ from werkzeug.security import generate_password_hash
 ENV_PATH = os.path.join("config", ".env")
 
 # Aktuelle App Version
-APP_VERSION = "2.0.9"
+APP_VERSION = "2.2.0"
 
 def create_default_env():
     # Nur erstellen, wenn die Datei NICHT existiert
@@ -32,6 +33,7 @@ def create_default_env():
                 "EXTERNE_API_URL=\n"
                 "EXTERNE_API_TOKEN=\n"
                 "ADMIN_PASSWORD=" + generate_password_hash("112112") + "\n"
+                "SECRET_KEY=" + secrets.token_hex(32) + "\n"
             )
         logger.info(".env-Datei mit Platzhaltern erstellt.")
 

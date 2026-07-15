@@ -1,14 +1,44 @@
 import sqlite3
+import threading
 from backend.log_helper import logger
 
 class DBHandler:
     def __init__(self, db_file='alarme.db'):
-        self.conn = sqlite3.connect(db_file, check_same_thread=False)
+        # timeout=30: wartet bei gesperrter DB bis zu 30s, statt sofort
+        # "database is locked" zu werfen (mehrere Verbindungen: Web + MQTT-Thread).
+        self.conn = sqlite3.connect(db_file, check_same_thread=False, timeout=30)
         self.conn.row_factory = sqlite3.Row  # WICHTIG: ermöglicht Zugriff mit row['id']
+        # WAL erlaubt gleichzeitige Leser + einen Schreiber ohne gegenseitiges Blockieren.
+        try:
+            self.conn.execute("PRAGMA journal_mode=WAL")
+        except Exception as e:
+            logger.warning(f"[DB] WAL-Modus konnte nicht aktiviert werden: {e}")
         self.cursor = self.conn.cursor()
+        # Serialisiert alle DB-Zugriffe dieser Verbindung (Cursor ist nicht thread-safe).
+        self._lock = threading.RLock()
         self._ensure_table()
         self._ensure_status_table()
         logger.info("SQLite-Verbindung hergestellt und Tabellen vorbereitet.")
+
+    # ---- Thread-sichere Zugriffshelfer (eigener Cursor je Aufruf, unter Lock) ----
+    def query_all(self, sql, params=()):
+        with self._lock:
+            cur = self.conn.cursor()
+            cur.execute(sql, params)
+            return cur.fetchall()
+
+    def query_one(self, sql, params=()):
+        with self._lock:
+            cur = self.conn.cursor()
+            cur.execute(sql, params)
+            return cur.fetchone()
+
+    def execute(self, sql, params=()):
+        with self._lock:
+            cur = self.conn.cursor()
+            cur.execute(sql, params)
+            self.conn.commit()
+            return cur.rowcount
 
     def _ensure_table(self):
         self.cursor.execute('''
@@ -69,6 +99,7 @@ class DBHandler:
         logger.info("[DB] Tabelle 'fahrzeuglog' geprüft/erstellt.")
 
     def log_alarm(self, alarm_data):
+        self._lock.acquire()
         try:
             external_id = alarm_data.get("externalId")
             self.cursor.execute("SELECT id FROM alarme WHERE external_id = ?", (external_id,))
@@ -154,21 +185,25 @@ class DBHandler:
             self.conn.commit()
         except Exception as e:
             logger.error(f"[DB] Fehler beim Speichern/Aktualisieren des Alarms: {e}")
+        finally:
+            self._lock.release()
 
     def log_fahrzeugstatus(self, timestamp, fahrzeug, status):
+        self._lock.acquire()
         try:
             self.cursor.execute(
                 "INSERT INTO fahrzeuglog (timestamp, fahrzeug, status) VALUES (?, ?, ?)",
                 (timestamp, fahrzeug, status)
             )
             self.conn.commit()
-            logger.info(f"[DB] Fahrzeugstatus gespeichert: {fahrzeug} → {status}")
+            logger.info(f"[DB] Fahrzeugstatus gespeichert: {fahrzeug} -> {status}")
         except Exception as e:
             logger.error(f"[DB] Fehler beim Speichern des Fahrzeugstatus: {e}")
+        finally:
+            self._lock.release()
 
     def get_alerted_rics_for_external_id(self, external_id):
-        self.cursor.execute("SELECT custom_alerted_rics FROM alarme WHERE external_id = ?", (external_id,))
-        row = self.cursor.fetchone()
+        row = self.query_one("SELECT custom_alerted_rics FROM alarme WHERE external_id = ?", (external_id,))
         if row and row["custom_alerted_rics"]:
             return set(ric.strip() for ric in row["custom_alerted_rics"].split(";") if ric.strip())
         return set()

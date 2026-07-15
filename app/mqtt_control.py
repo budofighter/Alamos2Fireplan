@@ -26,11 +26,16 @@ def start_mqtt():
         from backend.main import handle_status_message as main_handle_status
         main_handle_status(message)
 
+    try:
+        port = int(os.getenv("MQTT_PORT") or 1883)
+    except (TypeError, ValueError):
+        port = 1883
+
     mqtt_handler = MQTTHandler(
-        broker=os.getenv("MQTT_BROKER"),
-        port=int(os.getenv("MQTT_PORT")),
-        topic=os.getenv("MQTT_TOPIC"),
-        status_topic=os.getenv("MQTT_STATUS_TOPIC"),
+        broker=os.getenv("MQTT_BROKER") or "127.0.0.1",
+        port=port,
+        topic=os.getenv("MQTT_TOPIC") or "Alarm_Topic",
+        status_topic=os.getenv("MQTT_STATUS_TOPIC") or "status",
         username=os.getenv("MQTT_USERNAME"),
         password=os.getenv("MQTT_PASSWORD"),
         on_alarm=handle_alarm,

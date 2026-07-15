@@ -5,4 +5,8 @@ logger = log_helper.logger
 logger.info("Starte runserver.py ...")
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    # Produktionstauglicher WSGI-Server (multi-threaded, stabil im Dauerbetrieb)
+    # statt des Flask-Entwicklungsservers. Die DB-Zugriffe sind thread-sicher.
+    from waitress import serve
+    logger.info("Starte Server (waitress) auf http://0.0.0.0:5000 ...")
+    serve(app, host="0.0.0.0", port=5000, threads=8)
