@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [ValidateSet('install','update','uninstall')]
+    [ValidateSet('install','uninstall')]
     [string]$Mode = 'install'
 )
 
@@ -8,9 +8,9 @@ $ErrorActionPreference = 'Stop'
 
 # ---- Konstanten ----
 $ServiceName = 'Alamos2Fireplan'
-$ProjectDir  = $PSScriptRoot
+$InstallDir  = 'C:\Alamos2Fireplan'          # fester Installationsort (Neuinstallation)
+$ProjectDir  = $PSScriptRoot                  # entpacktes Paket = Quelle/Staging
 $PythonExe   = Join-Path $ProjectDir 'tools\python\python.exe'
-$RunServer   = Join-Path $ProjectDir 'runserver.py'
 $LogDir      = Join-Path $ProjectDir 'logs'
 $SetupLog    = Join-Path $LogDir 'setup.log'
 $PwFile      = 'C:\ProgramData\Alamos2Fireplan\pwfile.txt'
@@ -18,6 +18,10 @@ $PyVersion   = '3.13.14'
 $PyUrl       = "https://www.python.org/ftp/python/$PyVersion/python-$PyVersion-embed-amd64.zip"
 $MosqVersion = '2.0.20'
 $MosqUrl     = "https://mosquitto.org/files/binary/win64/mosquitto-$MosqVersion-install-windows-x64.exe"
+
+# Vollstaendige Dateiliste fuer eine Neuinstallation (Code + gebuendeltes Python/NSSM).
+$FreshItems  = @('app','backend','config','runserver.py','requirements.txt',
+                 'setup.ps1','setup.lib.ps1','install.bat','uninstall.bat','tools')
 
 # ---- Lib laden ----
 . (Join-Path $ProjectDir 'setup.lib.ps1')
@@ -38,16 +42,21 @@ function Write-Log {
 function Get-Nssm { return (Join-Path $ProjectDir 'tools\nssm.exe') }
 
 function Invoke-Nssm {
-    # Zentrale nssm-Hülle. Zwei Probleme werden hier abgefangen:
+    # Zentrale nssm-Huelle. Zwei Probleme werden hier abgefangen:
     #  1) nssm gibt UTF-16LE aus -> Windows PowerShell dekodiert mit NUL-Zeichen
     #     -> Ausgabe wird via Clear-NssmString bereinigt.
     #  2) nssm schreibt harmlose Meldungen (z. B. "Dienst nicht gestartet",
     #     "Can't open service") nach stderr. Unter $ErrorActionPreference='Stop'
-    #     würde das einen terminierenden Fehler auslösen. Daher lokal 'Continue'
-    #     und stderr nach stdout mergen. Echte Fehler erkennt der Aufrufer über
-    #     $LASTEXITCODE, nicht über Exceptions.
-    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$NssmArgs)
-    $nssm = Get-Nssm
+    #     wuerde das einen terminierenden Fehler ausloesen. Daher lokal 'Continue'
+    #     und stderr nach stdout mergen. Echte Fehler erkennt der Aufrufer ueber
+    #     $LASTEXITCODE, nicht ueber Exceptions.
+    # -NssmPath: explizite nssm.exe (fuer die Registrierung mit der Ziel-nssm,
+    # damit die Dienst-Binaerdatei im Installationsordner liegt).
+    param(
+        [string]$NssmPath,
+        [Parameter(ValueFromRemainingArguments = $true)][string[]]$NssmArgs
+    )
+    $nssm = if ($NssmPath) { $NssmPath } else { Get-Nssm }
     $ErrorActionPreference = 'Continue'
     $raw = & $nssm @NssmArgs 2>&1 | Out-String
     return (Clear-NssmString -Text $raw)
@@ -57,17 +66,31 @@ function Assert-Admin {
     $id = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($id)
     if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-        throw 'Dieses Skript benötigt Administratorrechte. Bitte install.bat/update.bat/uninstall.bat als Administrator ausführen.'
+        throw 'Dieses Skript benoetigt Administratorrechte. Bitte install.bat/uninstall.bat als Administrator ausfuehren.'
     }
 }
 
 function Test-Python {
     if (-not (Test-Path -LiteralPath $PythonExe)) {
-        throw "Embeddable Python fehlt unter $PythonExe. Ist das Paket vollständig entpackt?"
+        throw "Embeddable Python fehlt unter $PythonExe. Ist das Paket vollstaendig entpackt?"
     }
     & $PythonExe --version | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw "Python unter $PythonExe ist nicht lauffähig." }
+    if ($LASTEXITCODE -ne 0) { throw "Python unter $PythonExe ist nicht lauffaehig." }
     return $true
+}
+
+function Copy-Element {
+    # Kopiert Datei ODER Verzeichnis von $Src nach $Dst. Verzeichnisse werden mit
+    # robocopy gespiegelt (ueberschreibt, verschachtelt NICHT in ein bestehendes
+    # Ziel, wiederholt bei kurzzeitig gesperrten Dateien).
+    param([Parameter(Mandatory)][string]$Src, [Parameter(Mandatory)][string]$Dst)
+    if (Test-Path -LiteralPath $Src -PathType Container) {
+        robocopy $Src $Dst /E /NFL /NDL /NJH /NJS /R:3 /W:2 | Out-Null
+        if ($LASTEXITCODE -ge 8) { throw "Kopieren von '$Src' fehlgeschlagen (robocopy Code $LASTEXITCODE)." }
+        $global:LASTEXITCODE = 0
+    } else {
+        Copy-Item -LiteralPath $Src -Destination $Dst -Force
+    }
 }
 
 function Remove-Service {
@@ -77,34 +100,44 @@ function Remove-Service {
 }
 
 function Install-Service {
-    $nssm = Get-Nssm
-    if (-not (Test-Path -LiteralPath $nssm)) { throw "NSSM fehlt unter $nssm." }
+    # Registriert den Dienst mit der nssm.exe IM Installationsordner, damit der
+    # Dienst nicht von der (evtl. spaeter geloeschten) Staging-Kopie abhaengt.
+    param([Parameter(Mandatory)][string]$Dir)
+    $targetNssm = Join-Path $Dir 'tools\nssm.exe'
+    $py         = Join-Path $Dir 'tools\python\python.exe'
+    $run        = Join-Path $Dir 'runserver.py'
+    $svcLogDir  = Join-Path $Dir 'logs'
+    if (-not (Test-Path -LiteralPath $targetNssm)) { throw "NSSM fehlt unter $targetNssm." }
+    if (-not (Test-Path -LiteralPath $svcLogDir)) { New-Item -ItemType Directory -Path $svcLogDir -Force | Out-Null }
+
     Remove-Service
-    Invoke-Nssm install $ServiceName $PythonExe $RunServer | Out-Null
+    Invoke-Nssm -NssmPath $targetNssm install $ServiceName $py $run | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "nssm install schlug fehl (Code $LASTEXITCODE)." }
-    Invoke-Nssm set $ServiceName AppDirectory $ProjectDir | Out-Null
-    Invoke-Nssm set $ServiceName Start SERVICE_AUTO_START | Out-Null
-    Invoke-Nssm set $ServiceName ObjectName LocalSystem | Out-Null
-    Invoke-Nssm set $ServiceName AppStdout (Join-Path $LogDir 'service.log') | Out-Null
-    Invoke-Nssm set $ServiceName AppStderr (Join-Path $LogDir 'service.log') | Out-Null
-    Invoke-Nssm set $ServiceName AppRotateFiles 1 | Out-Null
-    Invoke-Nssm set $ServiceName AppRotateBytes 1048576 | Out-Null
-    Write-Log "Dienst '$ServiceName' registriert (Logging → logs/service.log)."
+    Invoke-Nssm -NssmPath $targetNssm set $ServiceName AppDirectory $Dir | Out-Null
+    Invoke-Nssm -NssmPath $targetNssm set $ServiceName Start SERVICE_AUTO_START | Out-Null
+    Invoke-Nssm -NssmPath $targetNssm set $ServiceName ObjectName LocalSystem | Out-Null
+    Invoke-Nssm -NssmPath $targetNssm set $ServiceName AppStdout (Join-Path $svcLogDir 'service.log') | Out-Null
+    Invoke-Nssm -NssmPath $targetNssm set $ServiceName AppStderr (Join-Path $svcLogDir 'service.log') | Out-Null
+    Invoke-Nssm -NssmPath $targetNssm set $ServiceName AppRotateFiles 1 | Out-Null
+    Invoke-Nssm -NssmPath $targetNssm set $ServiceName AppRotateBytes 1048576 | Out-Null
+    Write-Log "Dienst '$ServiceName' registriert (Zielordner: $Dir, Logging -> logs\service.log)."
 }
 
 function Assert-ServiceStarted {
     $status = Invoke-Nssm status $ServiceName
     if ($status -notmatch 'SERVICE_RUNNING') {
-        throw "Dienst '$ServiceName' läuft nicht (Status: $status). Siehe logs/service.log."
+        throw "Dienst '$ServiceName' laeuft nicht (Status: $status). Siehe logs\service.log im Installationsordner."
     }
-    Write-Log "Dienst '$ServiceName' läuft."
+    Write-Log "Dienst '$ServiceName' laeuft."
 }
 
 function Setup-Mosquitto {
+    param([Parameter(Mandatory)][string]$Dir)
     try {
         $mosqDir = 'C:\Program Files\mosquitto'
         $mosqExe = Join-Path $mosqDir 'mosquitto.exe'
         $mosqPw  = Join-Path $mosqDir 'mosquitto_passwd.exe'
+        $py      = Join-Path $Dir 'tools\python\python.exe'
 
         # 1. Installieren, falls nicht vorhanden
         if (-not (Test-Path -LiteralPath $mosqExe)) {
@@ -114,7 +147,7 @@ function Setup-Mosquitto {
             Write-Log 'Installiere Mosquitto (silent)...'
             Start-Process -FilePath $installer -ArgumentList '/S' -Wait
         } else {
-            Write-Log 'Mosquitto bereits installiert – nur Neukonfiguration.'
+            Write-Log 'Mosquitto bereits installiert - nur Neukonfiguration.'
         }
 
         # 2. Credentials abfragen
@@ -148,24 +181,24 @@ function Setup-Mosquitto {
         Start-Service -Name 'mosquitto' -ErrorAction SilentlyContinue
         Write-Log 'Mosquitto-Dienst gestartet.'
 
-        # 6. config/.env sicherstellen und MQTT-Schlüssel synchronisieren
-        Push-Location $ProjectDir
-        try { & $PythonExe -c 'import config' | Out-Null } finally { Pop-Location }
-        $envPath = Join-Path $ProjectDir 'config\.env'
+        # 6. config/.env im Installationsordner sicherstellen und MQTT-Schluessel synchronisieren
+        Push-Location $Dir
+        try { & $py -c 'import config' | Out-Null } finally { Pop-Location }
+        $envPath = Join-Path $Dir 'config\.env'
         Update-EnvFile -Path $envPath -Values @{
             MQTT_BROKER   = '127.0.0.1'
             MQTT_PORT     = '1883'
             MQTT_USERNAME = $user
             MQTT_PASSWORD = $pass
         } | Out-Null
-        Write-Log 'MQTT-Zugangsdaten in config/.env übernommen.'
+        Write-Log 'MQTT-Zugangsdaten in config\.env uebernommen.'
 
         # 7. Firewall optional
         $fw = Read-Host 'Port 1883 in der Firewall freigeben (Zugriff von anderem Rechner)? (j/n)'
         if ($fw -match '^(j|J)') {
             New-NetFirewallRule -DisplayName 'Mosquitto MQTT 1883' -Direction Inbound `
                 -Protocol TCP -LocalPort 1883 -Action Allow -ErrorAction SilentlyContinue | Out-Null
-            Write-Log 'Firewall-Regel für Port 1883 angelegt.'
+            Write-Log 'Firewall-Regel fuer Port 1883 angelegt.'
         }
 
         # 8. Abschlusshinweis
@@ -174,89 +207,66 @@ function Setup-Mosquitto {
     }
     catch {
         Write-Log "Mosquitto-Setup fehlgeschlagen: $($_.Exception.Message)" 'WARN'
-        Write-Log 'Die Alamos2Fireplan-Installation läuft trotzdem weiter.' 'WARN'
+        Write-Log 'Die Alamos2Fireplan-Installation laeuft trotzdem weiter.' 'WARN'
     }
-}
-
-function Invoke-Install {
-    Assert-Admin
-    Test-Python | Out-Null
-    Install-Service
-
-    $answer = Read-Host 'Lokalen Mosquitto-Broker einrichten? (j/n)'
-    if ($answer -match '^(j|J)') { Setup-Mosquitto }
-
-    Invoke-Nssm start $ServiceName | Out-Null
-    Start-Sleep -Seconds 2
-    Assert-ServiceStarted
-    Write-Log "Installation abgeschlossen. Weboberfläche: http://localhost:5000"
 }
 
 function Get-ServiceDir {
     $dir = Invoke-Nssm get $ServiceName AppDirectory
     if ([string]::IsNullOrWhiteSpace($dir)) {
-        throw "Dienst '$ServiceName' nicht gefunden. Bitte zuerst install.bat ausführen."
+        throw "Installationsordner des Dienstes '$ServiceName' konnte nicht ermittelt werden."
     }
     return $dir
 }
 
-function Invoke-Update {
-    Assert-Admin
-    $target = Get-ServiceDir
-    Write-Log "Update-Ziel automatisch erkannt: $target"
+function Invoke-FreshInstall {
+    param([Parameter(Mandatory)][string]$Dir)
+    Write-Log "Neuinstallation nach '$Dir'."
+    if (-not (Test-Path -LiteralPath $Dir)) { New-Item -ItemType Directory -Path $Dir -Force | Out-Null }
 
-    # Same-Dir-Schutz: update.bat muss aus der NEUEN, separat entpackten Version
-    # laufen, nicht aus dem installierten Ordner selbst (sonst würde eine Datei
-    # auf sich selbst kopiert). Prüfen, bevor der Dienst gestoppt wird.
-    $srcResolved = (Resolve-Path -LiteralPath $ProjectDir).Path.TrimEnd('\')
-    $dstResolved = (Resolve-Path -LiteralPath $target).Path.TrimEnd('\')
-    if ($srcResolved -ieq $dstResolved) {
-        throw "update.bat läuft aus dem installierten Ordner selbst ($target). Bitte die NEUE Version in einen ANDEREN Ordner entpacken und update.bat von dort starten."
+    foreach ($item in $FreshItems) {
+        $src = Join-Path $ProjectDir $item
+        if (-not (Test-Path -LiteralPath $src)) { continue }
+        Copy-Element -Src $src -Dst (Join-Path $Dir $item)
     }
+    Write-Log "Dateien nach '$Dir' kopiert."
 
-    Write-Log 'Stoppe Dienst für Update...'
+    Install-Service -Dir $Dir
+
+    $answer = Read-Host 'Lokalen Mosquitto-Broker einrichten? (j/n)'
+    if ($answer -match '^(j|J)') { Setup-Mosquitto -Dir $Dir }
+
+    Invoke-Nssm start $ServiceName | Out-Null
+    Start-Sleep -Seconds 2
+    Assert-ServiceStarted
+    Write-Log "Installation abgeschlossen. Installationsordner: $Dir - Weboberflaeche: http://localhost:5000"
+}
+
+function Invoke-UpdateInPlace {
+    param([Parameter(Mandatory)][string]$Dir)
+    Write-Log "Update der bestehenden Installation in '$Dir'."
+
+    Write-Log 'Stoppe Dienst fuer Update...'
     Invoke-Nssm stop $ServiceName | Out-Null
     Start-Sleep -Seconds 2
 
-    # --- Backup ---
-    $targetItems = Get-ChildItem -LiteralPath $target -Force | Select-Object -ExpandProperty Name
+    # --- Backup (config, alarme.db, logs) ---
+    $targetItems = Get-ChildItem -LiteralPath $Dir -Force | Select-Object -ExpandProperty Name
     $backupItems = Get-BackupItems -TargetItems $targetItems
-    $backupDir = Join-Path (Join-Path $target 'backups') (Get-BackupFolderName -Timestamp (Get-Date))
+    $backupDir = Join-Path (Join-Path $Dir 'backups') (Get-BackupFolderName -Timestamp (Get-Date))
     New-Item -ItemType Directory -Path $backupDir -Force | Out-Null
     foreach ($item in $backupItems) {
-        Copy-Item -LiteralPath (Join-Path $target $item) -Destination $backupDir -Recurse -Force
+        Copy-Item -LiteralPath (Join-Path $Dir $item) -Destination $backupDir -Recurse -Force
     }
     Write-Log "Backup erstellt: $backupDir (Elemente: $($backupItems -join ', '))"
 
-    # --- Code kopieren (nur Allowlist) ---
+    # --- Nur Code aktualisieren (config/, alarme.db, logs/ bleiben unangetastet) ---
     $sourceItems = Get-ChildItem -LiteralPath $ProjectDir -Force | Select-Object -ExpandProperty Name
     $copyPlan = Get-UpdateCopyPlan -SourceItems $sourceItems
     foreach ($item in $copyPlan) {
-        $src = Join-Path $ProjectDir $item
-        $dst = Join-Path $target $item
-        if (Test-Path -LiteralPath $src -PathType Container) {
-            # Verzeichnisinhalt ins bestehende Ziel spiegeln. Copy-Item -Recurse in ein
-            # existierendes Verzeichnis würde die Quelle hineinschachteln (app -> app\app);
-            # robocopy überschreibt Dateien, verschachtelt nicht und wiederholt bei
-            # kurzzeitig gesperrten Dateien (z. B. gerade gestopptes tools\python).
-            robocopy $src $dst /E /NFL /NDL /NJH /NJS /R:3 /W:2 | Out-Null
-            if ($LASTEXITCODE -ge 8) {
-                throw "Kopieren von '$item' fehlgeschlagen (robocopy Code $LASTEXITCODE)."
-            }
-            $global:LASTEXITCODE = 0
-        } else {
-            Copy-Item -LiteralPath $src -Destination $dst -Force
-        }
+        Copy-Element -Src (Join-Path $ProjectDir $item) -Dst (Join-Path $Dir $item)
     }
     Write-Log "Code aktualisiert (Elemente: $($copyPlan -join ', '))."
-
-    # --- Abhängigkeiten aktualisieren ---
-    $targetPython = Join-Path $target 'tools\python\python.exe'
-    $reqs = Join-Path $target 'requirements.txt'
-    if ((Test-Path -LiteralPath $targetPython) -and (Test-Path -LiteralPath $reqs)) {
-        & $targetPython -m pip install -r $reqs
-        Write-Log 'Python-Abhängigkeiten aktualisiert.'
-    }
 
     Invoke-Nssm start $ServiceName | Out-Null
     Start-Sleep -Seconds 2
@@ -264,35 +274,58 @@ function Invoke-Update {
     Write-Log 'Update abgeschlossen.'
 }
 
+function Invoke-Setup {
+    # Ein Einstieg fuer Erst-Installation UND Update: erkennt anhand des Dienstes,
+    # was zu tun ist. Der Kunde fuehrt immer install.bat aus dem entpackten Paket aus.
+    Assert-Admin
+    Test-Python | Out-Null
+
+    $exists = [bool](Get-Service -Name $ServiceName -ErrorAction SilentlyContinue)
+    $target = if ($exists) { Get-ServiceDir } else { $InstallDir }
+
+    # Same-Dir-Schutz: install.bat muss aus dem ENTPACKTEN Paket laufen, nicht aus
+    # dem Installationsordner selbst (sonst Datei-auf-sich-selbst-Kopie).
+    $srcResolved = (Resolve-Path -LiteralPath $ProjectDir).Path.TrimEnd('\')
+    if (Test-Path -LiteralPath $target) {
+        $dstResolved = (Resolve-Path -LiteralPath $target).Path.TrimEnd('\')
+        if ($srcResolved -ieq $dstResolved) {
+            throw "install.bat laeuft aus dem Installationsordner selbst ($target). Bitte das ENTPACKTE Paket (neue Version) verwenden und install.bat von dort starten."
+        }
+    }
+
+    if ($exists) {
+        Write-Log "Bestehende Installation gefunden unter '$target' - fuehre UPDATE durch."
+        Invoke-UpdateInPlace -Dir $target
+    } else {
+        Write-Log "Keine bestehende Installation - fuehre NEUINSTALLATION durch."
+        Invoke-FreshInstall -Dir $target
+    }
+}
+
 function Invoke-Uninstall {
     Assert-Admin
     $confirm = Read-Host "Dienst '$ServiceName' wirklich entfernen? (j/n)"
     if ($confirm -notmatch '^(j|J)') { Write-Log 'Deinstallation abgebrochen.'; return }
 
+    $dir = $null
+    if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
+        try { $dir = Get-ServiceDir } catch { $dir = $null }
+    }
+
     Remove-Service
     Write-Log "Dienst '$ServiceName' entfernt."
 
-    $delPy = Read-Host 'Gebündeltes Python (tools\python) löschen? (j/n)'
-    if ($delPy -match '^(j|J)') {
-        $py = Join-Path $ProjectDir 'tools\python'
-        if (Test-Path -LiteralPath $py) { Remove-Item -LiteralPath $py -Recurse -Force; Write-Log 'tools\python gelöscht.' }
+    if ($dir) {
+        Write-Log "Installationsordner '$dir' (inkl. Config, Datenbank, Backups) wurde NICHT geloescht - bei Bedarf manuell entfernen."
     }
-
-    $delBk = Read-Host 'Backups (backups\) löschen? (j/n)'
-    if ($delBk -match '^(j|J)') {
-        $bk = Join-Path $ProjectDir 'backups'
-        if (Test-Path -LiteralPath $bk) { Remove-Item -LiteralPath $bk -Recurse -Force; Write-Log 'backups gelöscht.' }
-    }
-
-    Write-Log 'Mosquitto wurde NICHT entfernt. Bei Bedarf manuell über die Windows-Programme deinstallieren.'
+    Write-Log 'Mosquitto wurde NICHT entfernt. Bei Bedarf manuell ueber die Windows-Programme deinstallieren.'
 }
 
-# ---- Dispatch (Platzhalter, in Folgetasks gefüllt) ----
+# ---- Dispatch ----
 try {
     Write-Log "setup.ps1 gestartet im Modus '$Mode'."
     switch ($Mode) {
-        'install'   { Invoke-Install }
-        'update'    { Invoke-Update }
+        'install'   { Invoke-Setup }
         'uninstall' { Invoke-Uninstall }
     }
     exit 0

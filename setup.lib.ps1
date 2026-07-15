@@ -1,4 +1,4 @@
-# setup.lib.ps1 — reine Hilfsfunktionen (keine System-Seiteneffekte).
+# setup.lib.ps1 - reine Hilfsfunktionen (keine System-Seiteneffekte).
 # Dot-sourced von setup.ps1 und von den Pester-Tests.
 
 function Update-EnvFile {
@@ -33,7 +33,7 @@ function Get-UpdateCopyPlan {
     [CmdletBinding()]
     param([Parameter(Mandatory)][string[]]$SourceItems)
     $include = @('app','backend','tools','runserver.py','requirements.txt',
-                 'setup.ps1','setup.lib.ps1','install.bat','update.bat','uninstall.bat')
+                 'setup.ps1','setup.lib.ps1','install.bat','uninstall.bat')
     return @($SourceItems | Where-Object { $include -contains $_ })
 }
 
@@ -52,7 +52,7 @@ function Get-BackupFolderName {
 
 function Clear-NssmString {
     # nssm gibt UTF-16LE aus; Windows PowerShell dekodiert das mit eingestreuten
-    # NUL-Zeichen (z. B. "C`0:`0\`0..."), was Pfad-Auflösung und Status-Matching
+    # NUL-Zeichen (z. B. "C`0:`0\`0..."), was Pfad-Aufloesung und Status-Matching
     # bricht. Diese Funktion entfernt die NUL-Zeichen und trimmt das Ergebnis.
     [CmdletBinding()]
     param([Parameter(Mandatory)][AllowEmptyString()][string]$Text)
