@@ -86,6 +86,12 @@ class DBHandler:
 
         self.conn.commit()
 
+        # Index auf external_id: die Alarmverarbeitung sucht bei JEDEM Alarm per
+        # external_id (handle_alarm + log_alarm). Ohne Index = Full-Table-Scan,
+        # der mit wachsender Alarmzahl langsamer wird.
+        self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_alarme_external_id ON alarme(external_id)")
+        self.conn.commit()
+
     def _ensure_status_table(self):
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS fahrzeuglog (
@@ -95,6 +101,9 @@ class DBHandler:
                 status INTEGER
             )
         ''')
+        self.conn.commit()
+        # Index fuer die Status-Abfragen (ORDER BY timestamp DESC LIMIT 100).
+        self.cursor.execute("CREATE INDEX IF NOT EXISTS idx_fahrzeuglog_timestamp ON fahrzeuglog(timestamp)")
         self.conn.commit()
         logger.info("[DB] Tabelle 'fahrzeuglog' geprüft/erstellt.")
 

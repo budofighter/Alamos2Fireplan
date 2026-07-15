@@ -61,15 +61,20 @@ def handle_alarm(data):
             existing_rics = set()
             new_rics = translated_rics
 
-        def _send_fireplan_for_ric(ric: str):
-            payload = build_fireplan_payload(data)
-            payload["ric"] = ric
-            fp.alarm(payload)  # fp.alarm loggt intern Erfolg/Fehler bereits
-            return ric
-
         if new_rics:
             logger.info(f"✅ Neue RICs zu alarmieren: {new_rics}")
             if os.getenv("AUSWERTUNG_FIREPLAN", "False") == "True":
+                # Payload EINMAL bauen; pro RIC nur das Feld 'ric' setzen. Das spart
+                # je RIC ein erneutes Einlesen der ric_map.json und den kompletten
+                # Neuaufbau des Payloads.
+                base_payload = build_fireplan_payload(data)
+
+                def _send_fireplan_for_ric(ric: str):
+                    payload = dict(base_payload)
+                    payload["ric"] = ric
+                    fp.alarm(payload)  # loggt intern Erfolg/Fehler
+                    return ric
+
                 # Parallel pro RIC senden (I/O-bound)
                 max_workers = min(8, max(1, len(new_rics)))  # begrenzen, aber dynamisch
                 with ThreadPoolExecutor(max_workers=max_workers) as ex:
