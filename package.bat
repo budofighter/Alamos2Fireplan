@@ -6,7 +6,7 @@ set OUTPUT_DIR=%~dp0
 set ZIP_NAME=Alamos2Fireplan
 set CONFIG_FILE=%OUTPUT_DIR%config\config.py
 set TEMP_FOLDER=%OUTPUT_DIR%__package_tmp__
-set PY_VERSION=3.12.8
+set PY_VERSION=3.13.14
 set PY_URL=https://www.python.org/ftp/python/%PY_VERSION%/python-%PY_VERSION%-embed-amd64.zip
 set GETPIP_URL=https://bootstrap.pypa.io/get-pip.py
 
