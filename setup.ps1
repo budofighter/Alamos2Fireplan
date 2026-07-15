@@ -309,6 +309,57 @@ function Invoke-Setup {
     }
 }
 
+function Uninstall-Mosquitto {
+    try {
+        $mosqDir = 'C:\Program Files\mosquitto'
+        $mosqExe = Join-Path $mosqDir 'mosquitto.exe'
+        $uninst  = Join-Path $mosqDir 'Uninstall.exe'
+
+        if (Get-Service -Name 'mosquitto' -ErrorAction SilentlyContinue) {
+            Stop-Service -Name 'mosquitto' -Force -ErrorAction SilentlyContinue
+            if (Test-Path -LiteralPath $mosqExe) { & $mosqExe uninstall 2>$null | Out-Null }
+        }
+        if (Test-Path -LiteralPath $uninst) {
+            Write-Log 'Deinstalliere Mosquitto (silent)...'
+            Start-Process -FilePath $uninst -ArgumentList '/S' -Wait
+            Write-Log 'Mosquitto deinstalliert.'
+        } else {
+            Write-Log 'Mosquitto-Uninstaller nicht gefunden (evtl. nicht installiert).' 'WARN'
+        }
+        # pwfile-Verzeichnis + Firewall-Regel entfernen
+        $pwDir = Split-Path $PwFile -Parent
+        if (Test-Path -LiteralPath $pwDir) { Remove-Item -LiteralPath $pwDir -Recurse -Force -ErrorAction SilentlyContinue }
+        Get-NetFirewallRule -DisplayName 'Mosquitto MQTT 1883' -ErrorAction SilentlyContinue |
+            Remove-NetFirewallRule -ErrorAction SilentlyContinue
+        Write-Log 'Mosquitto-Zugangsdatei und Firewall-Regel entfernt (falls vorhanden).'
+    }
+    catch {
+        Write-Log "Mosquitto-Deinstallation fehlgeschlagen: $($_.Exception.Message)" 'WARN'
+    }
+}
+
+function Remove-InstallDir {
+    # Der laufende Prozess (setup.ps1/uninstall.bat) liegt i. d. R. IM zu
+    # loeschenden Ordner -> ein losgeloester Helfer wartet, bis alle Dateien frei
+    # sind (User beendet das Fenster), loescht den Ordner und raeumt sich selbst weg.
+    param([Parameter(Mandatory)][string]$Dir)
+    $deleter = Join-Path $env:TEMP ("a2f_uninstall_" + [guid]::NewGuid().ToString("N") + ".cmd")
+    $lines = @(
+        '@echo off',
+        'cd /d C:\',
+        ':retry',
+        ('rmdir /s /q "' + $Dir + '" 2>nul'),
+        ('if not exist "' + $Dir + '" goto done'),
+        'ping 127.0.0.1 -n 2 >nul',
+        'goto retry',
+        ':done',
+        'del "%~f0" >nul 2>&1'
+    )
+    Set-Content -LiteralPath $deleter -Value $lines -Encoding ASCII
+    Start-Process -FilePath $env:ComSpec -ArgumentList '/c', $deleter -WindowStyle Hidden -WorkingDirectory 'C:\'
+    Write-Log "Installationsordner '$Dir' wird nach dem Schliessen dieses Fensters vollstaendig entfernt."
+}
+
 function Invoke-Uninstall {
     Assert-Admin
     $confirm = Read-Host "Dienst '$ServiceName' wirklich entfernen? (j/n)"
@@ -318,14 +369,22 @@ function Invoke-Uninstall {
     if (Get-Service -Name $ServiceName -ErrorAction SilentlyContinue) {
         try { $dir = Get-ServiceDir } catch { $dir = $null }
     }
+    if (-not $dir) { $dir = $InstallDir }
 
     Remove-Service
     Write-Log "Dienst '$ServiceName' entfernt."
 
-    if ($dir) {
-        Write-Log "Installationsordner '$dir' (inkl. Config, Datenbank, Backups) wurde NICHT geloescht - bei Bedarf manuell entfernen."
+    $delMosq = Read-Host 'Lokalen Mosquitto-Broker ebenfalls deinstallieren? (j/n)'
+    if ($delMosq -match '^(j|J)') { Uninstall-Mosquitto }
+    else { Write-Log 'Mosquitto bleibt erhalten.' }
+
+    $delDir = Read-Host "Installationsordner '$dir' komplett loeschen - inkl. Config, Datenbank und Backups? (j/n)"
+    if ($delDir -match '^(j|J)') {
+        Remove-InstallDir -Dir $dir
+    } else {
+        Write-Log "Installationsordner '$dir' bleibt erhalten."
     }
-    Write-Log 'Mosquitto wurde NICHT entfernt. Bei Bedarf manuell ueber die Windows-Programme deinstallieren.'
+    Write-Log 'Deinstallation abgeschlossen.'
 }
 
 # ---- Dispatch ----
