@@ -16,7 +16,7 @@ $SetupLog    = Join-Path $LogDir 'setup.log'
 $PwFile      = 'C:\ProgramData\Alamos2Fireplan\pwfile.txt'
 $PyVersion   = '3.13.14'
 $PyUrl       = "https://www.python.org/ftp/python/$PyVersion/python-$PyVersion-embed-amd64.zip"
-$MosqVersion = '2.0.20'
+$MosqVersion = '2.0.22'
 $MosqUrl     = "https://mosquitto.org/files/binary/win64/mosquitto-$MosqVersion-install-windows-x64.exe"
 
 # Vollstaendige Dateiliste fuer eine Neuinstallation (Code + gebuendeltes Python/NSSM).
@@ -146,12 +146,13 @@ function Setup-Mosquitto {
         $mosqPw  = Join-Path $mosqDir 'mosquitto_passwd.exe'
         $py      = Join-Path $Dir 'tools\python\python.exe'
 
-        # 1. Installieren, falls nicht vorhanden
+        # 1. Installieren, falls nicht vorhanden (NSIS-Installer -> /S = lautlos)
         if (-not (Test-Path -LiteralPath $mosqExe)) {
             $installer = Join-Path $env:TEMP "mosquitto-install.exe"
             Write-Log "Lade Mosquitto herunter: $MosqUrl"
+            $ProgressPreference = 'SilentlyContinue'   # ohne Fortschrittsbalken deutlich schneller
             Invoke-WebRequest -Uri $MosqUrl -OutFile $installer
-            Write-Log 'Installiere Mosquitto (silent)...'
+            Write-Log 'Installiere Mosquitto (silent, ohne Rueckfragen)...'
             Start-Process -FilePath $installer -ArgumentList '/S' -Wait
         } else {
             Write-Log 'Mosquitto bereits installiert - nur Neukonfiguration.'
@@ -163,6 +164,11 @@ function Setup-Mosquitto {
         $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
         $pass = [Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
         [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+
+        if ([string]::IsNullOrWhiteSpace($user) -or [string]::IsNullOrWhiteSpace($pass)) {
+            Write-Log 'MQTT-Benutzername/Passwort leer - Mosquitto-Setup abgebrochen.' 'WARN'
+            return
+        }
 
         # 3. pwfile anlegen (Pfad ohne Leerzeichen)
         $pwDir = Split-Path $PwFile -Parent
@@ -177,7 +183,9 @@ function Setup-Mosquitto {
             "password_file $PwFile",
             'listener 1883'
         )
-        Set-Content -LiteralPath (Join-Path $mosqDir 'mosquitto.conf') -Value $conf -Encoding UTF8
+        # UTF-8 OHNE BOM: WPS 5.1 wuerde mit -Encoding UTF8 ein BOM voranstellen,
+        # das die erste conf-Zeile (allow_anonymous) fuer mosquitto unbrauchbar macht.
+        [System.IO.File]::WriteAllLines((Join-Path $mosqDir 'mosquitto.conf'), $conf, (New-Object System.Text.UTF8Encoding($false)))
         Write-Log 'mosquitto.conf geschrieben.'
 
         # 5. Dienst sicherstellen + neu starten
@@ -187,6 +195,24 @@ function Setup-Mosquitto {
         Restart-Service -Name 'mosquitto' -ErrorAction SilentlyContinue
         Start-Service -Name 'mosquitto' -ErrorAction SilentlyContinue
         Write-Log 'Mosquitto-Dienst gestartet.'
+
+        # 5b. Wirklich verifizieren, dass der Broker auf 1883 lauscht. Startet
+        # mosquitto wegen eines Config-Fehlers nicht, gibt es sonst nur ein stilles
+        # "Connection refused" spaeter.
+        Start-Sleep -Seconds 2
+        $listening = $false
+        try {
+            $tcp = New-Object System.Net.Sockets.TcpClient
+            $tcp.Connect('127.0.0.1', 1883)
+            $listening = $tcp.Connected
+            $tcp.Close()
+        } catch { $listening = $false }
+        if ($listening) {
+            Write-Log 'Mosquitto laeuft und lauscht auf 127.0.0.1:1883.'
+        } else {
+            Write-Log 'ACHTUNG: Mosquitto lauscht NICHT auf 1883 - der Dienst ist vermutlich beim Start abgebrochen.' 'WARN'
+            Write-Log 'Diagnose: Admin-Konsole -> cd "C:\Program Files\mosquitto" -> mosquitto -c mosquitto.conf -v   (zeigt die genaue Fehlerursache).' 'WARN'
+        }
 
         # 6. config/.env im Installationsordner sicherstellen und MQTT-Schluessel synchronisieren
         Push-Location $Dir
@@ -208,9 +234,36 @@ function Setup-Mosquitto {
             Write-Log 'Firewall-Regel fuer Port 1883 angelegt.'
         }
 
-        # 8. Abschlusshinweis
-        Write-Log "FERTIG. MQTT-Zugang: Benutzer '$user' / Broker 127.0.0.1:1883."
-        Write-Host "WICHTIG: Diese Zugangsdaten auch in Alamos eintragen (Benutzer: $user)." -ForegroundColor Cyan
+        # 8. Zugangsdaten fuer Alamos ausgeben
+        $ips = @()
+        try {
+            $ips = @(Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
+                Where-Object { $_.IPAddress -ne '127.0.0.1' -and $_.IPAddress -notlike '169.254.*' } |
+                Select-Object -ExpandProperty IPAddress)
+        } catch {}
+        $ipText = if ($ips.Count) { $ips -join ', ' } else { '(keine LAN-IP gefunden)' }
+
+        $envLines = @(Get-Content -LiteralPath $envPath -ErrorAction SilentlyContinue)
+        $topic  = (($envLines | Where-Object { $_ -like 'MQTT_TOPIC=*' } | Select-Object -First 1) -replace '^MQTT_TOPIC=', '')
+        $sTopic = (($envLines | Where-Object { $_ -like 'MQTT_STATUS_TOPIC=*' } | Select-Object -First 1) -replace '^MQTT_STATUS_TOPIC=', '')
+        if (-not $topic)  { $topic  = 'Alarm_Topic' }
+        if (-not $sTopic) { $sTopic = 'status' }
+
+        Write-Log "Mosquitto eingerichtet, MQTT-Benutzer '$user' angelegt."
+        Write-Host ''
+        Write-Host '==================== MQTT-ZUGANGSDATEN FUER ALAMOS ====================' -ForegroundColor Cyan
+        Write-Host ("  Broker (dieser Rechner): $ipText") -ForegroundColor Cyan
+        Write-Host  '                           (bzw. 127.0.0.1, wenn Alamos auf DIESEM Rechner laeuft)' -ForegroundColor Cyan
+        Write-Host  '  Port                   : 1883' -ForegroundColor Cyan
+        Write-Host ("  Benutzername           : $user") -ForegroundColor Cyan
+        Write-Host ("  Passwort               : $pass") -ForegroundColor Cyan
+        Write-Host ("  Alarm-Topic            : $topic") -ForegroundColor Cyan
+        Write-Host ("  Status-Topic           : $sTopic") -ForegroundColor Cyan
+        Write-Host '======================================================================' -ForegroundColor Cyan
+        Write-Host 'Diese Daten in ALAMOS als MQTT-Ziel eintragen - bitte notieren!' -ForegroundColor Yellow
+        Write-Host 'Alamos2Fireplan selbst verbindet sich lokal mit 127.0.0.1 - diese' -ForegroundColor Yellow
+        Write-Host 'Einstellung in den A2F-Einstellungen NICHT auf die LAN-IP aendern.' -ForegroundColor Yellow
+        Write-Host ''
     }
     catch {
         Write-Log "Mosquitto-Setup fehlgeschlagen: $($_.Exception.Message)" 'WARN'

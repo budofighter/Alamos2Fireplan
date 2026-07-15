@@ -25,7 +25,11 @@ function Update-EnvFile {
     foreach ($key in $Values.Keys) {
         if (-not $seen.ContainsKey($key)) { $result.Add("$key=$($Values[$key])") }
     }
-    Set-Content -LiteralPath $Path -Value $result -Encoding UTF8
+    # UTF-8 OHNE BOM schreiben. Windows PowerShell 5.1 wuerde mit
+    # 'Set-Content -Encoding UTF8' ein BOM voranstellen, das die erste .env-Zeile
+    # (z. B. MQTT_BROKER) fuer python-dotenv unbrauchbar macht.
+    $full = [System.IO.Path]::GetFullPath($Path)
+    [System.IO.File]::WriteAllLines($full, $result, (New-Object System.Text.UTF8Encoding($false)))
     return $result.ToArray()
 }
 
