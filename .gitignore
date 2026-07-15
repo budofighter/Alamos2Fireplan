@@ -14,8 +14,11 @@ logs/
 config/.env
 config/ric_map.json
 config/fs_api_token.json
-tools/*
-!tools/nssm.exe
+docs
+tests
+package.bat
+.superpowers
+
 
 # VS Code
 .vscode/
