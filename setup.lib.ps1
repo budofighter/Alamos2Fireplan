@@ -49,3 +49,12 @@ function Get-BackupFolderName {
     param([Parameter(Mandatory)][datetime]$Timestamp)
     return 'backup_' + $Timestamp.ToString('yyyyMMdd-HHmmss')
 }
+
+function Clear-NssmString {
+    # nssm gibt UTF-16LE aus; Windows PowerShell dekodiert das mit eingestreuten
+    # NUL-Zeichen (z. B. "C`0:`0\`0..."), was Pfad-Auflösung und Status-Matching
+    # bricht. Diese Funktion entfernt die NUL-Zeichen und trimmt das Ergebnis.
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Text)
+    return ($Text -replace "`0", '').Trim()
+}

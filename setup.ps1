@@ -37,6 +37,22 @@ function Write-Log {
 
 function Get-Nssm { return (Join-Path $ProjectDir 'tools\nssm.exe') }
 
+function Invoke-Nssm {
+    # Zentrale nssm-Hülle. Zwei Probleme werden hier abgefangen:
+    #  1) nssm gibt UTF-16LE aus -> Windows PowerShell dekodiert mit NUL-Zeichen
+    #     -> Ausgabe wird via Clear-NssmString bereinigt.
+    #  2) nssm schreibt harmlose Meldungen (z. B. "Dienst nicht gestartet",
+    #     "Can't open service") nach stderr. Unter $ErrorActionPreference='Stop'
+    #     würde das einen terminierenden Fehler auslösen. Daher lokal 'Continue'
+    #     und stderr nach stdout mergen. Echte Fehler erkennt der Aufrufer über
+    #     $LASTEXITCODE, nicht über Exceptions.
+    param([Parameter(ValueFromRemainingArguments = $true)][string[]]$NssmArgs)
+    $nssm = Get-Nssm
+    $ErrorActionPreference = 'Continue'
+    $raw = & $nssm @NssmArgs 2>&1 | Out-String
+    return (Clear-NssmString -Text $raw)
+}
+
 function Assert-Admin {
     $id = [Security.Principal.WindowsIdentity]::GetCurrent()
     $principal = New-Object Security.Principal.WindowsPrincipal($id)
@@ -55,9 +71,8 @@ function Test-Python {
 }
 
 function Remove-Service {
-    $nssm = Get-Nssm
-    & $nssm stop $ServiceName 2>$null | Out-Null
-    & $nssm remove $ServiceName confirm 2>$null | Out-Null
+    Invoke-Nssm stop $ServiceName | Out-Null
+    Invoke-Nssm remove $ServiceName confirm | Out-Null
     Write-Log "Vorhandener Dienst '$ServiceName' gestoppt/entfernt (falls vorhanden)."
 }
 
@@ -65,22 +80,21 @@ function Install-Service {
     $nssm = Get-Nssm
     if (-not (Test-Path -LiteralPath $nssm)) { throw "NSSM fehlt unter $nssm." }
     Remove-Service
-    & $nssm install $ServiceName $PythonExe $RunServer
+    Invoke-Nssm install $ServiceName $PythonExe $RunServer | Out-Null
     if ($LASTEXITCODE -ne 0) { throw "nssm install schlug fehl (Code $LASTEXITCODE)." }
-    & $nssm set $ServiceName AppDirectory $ProjectDir | Out-Null
-    & $nssm set $ServiceName Start SERVICE_AUTO_START | Out-Null
-    & $nssm set $ServiceName ObjectName LocalSystem | Out-Null
-    & $nssm set $ServiceName AppStdout (Join-Path $LogDir 'service.log') | Out-Null
-    & $nssm set $ServiceName AppStderr (Join-Path $LogDir 'service.log') | Out-Null
-    & $nssm set $ServiceName AppRotateFiles 1 | Out-Null
-    & $nssm set $ServiceName AppRotateBytes 1048576 | Out-Null
+    Invoke-Nssm set $ServiceName AppDirectory $ProjectDir | Out-Null
+    Invoke-Nssm set $ServiceName Start SERVICE_AUTO_START | Out-Null
+    Invoke-Nssm set $ServiceName ObjectName LocalSystem | Out-Null
+    Invoke-Nssm set $ServiceName AppStdout (Join-Path $LogDir 'service.log') | Out-Null
+    Invoke-Nssm set $ServiceName AppStderr (Join-Path $LogDir 'service.log') | Out-Null
+    Invoke-Nssm set $ServiceName AppRotateFiles 1 | Out-Null
+    Invoke-Nssm set $ServiceName AppRotateBytes 1048576 | Out-Null
     Write-Log "Dienst '$ServiceName' registriert (Logging → logs/service.log)."
 }
 
 function Assert-ServiceStarted {
-    $nssm = Get-Nssm
-    $status = (& $nssm status $ServiceName) 2>$null
-    if ("$status".Trim() -notmatch 'SERVICE_RUNNING') {
+    $status = Invoke-Nssm status $ServiceName
+    if ($status -notmatch 'SERVICE_RUNNING') {
         throw "Dienst '$ServiceName' läuft nicht (Status: $status). Siehe logs/service.log."
     }
     Write-Log "Dienst '$ServiceName' läuft."
@@ -172,16 +186,14 @@ function Invoke-Install {
     $answer = Read-Host 'Lokalen Mosquitto-Broker einrichten? (j/n)'
     if ($answer -match '^(j|J)') { Setup-Mosquitto }
 
-    & (Get-Nssm) start $ServiceName | Out-Null
+    Invoke-Nssm start $ServiceName | Out-Null
     Start-Sleep -Seconds 2
     Assert-ServiceStarted
     Write-Log "Installation abgeschlossen. Weboberfläche: http://localhost:5000"
 }
 
 function Get-ServiceDir {
-    $nssm = Get-Nssm
-    $dir = (& $nssm get $ServiceName AppDirectory) 2>$null
-    $dir = "$dir".Trim()
+    $dir = Invoke-Nssm get $ServiceName AppDirectory
     if ([string]::IsNullOrWhiteSpace($dir)) {
         throw "Dienst '$ServiceName' nicht gefunden. Bitte zuerst install.bat ausführen."
     }
@@ -192,10 +204,9 @@ function Invoke-Update {
     Assert-Admin
     $target = Get-ServiceDir
     Write-Log "Update-Ziel automatisch erkannt: $target"
-    $nssm = Get-Nssm
 
     Write-Log 'Stoppe Dienst für Update...'
-    & $nssm stop $ServiceName | Out-Null
+    Invoke-Nssm stop $ServiceName | Out-Null
     Start-Sleep -Seconds 2
 
     # --- Backup ---
@@ -238,7 +249,7 @@ function Invoke-Update {
         Write-Log 'Python-Abhängigkeiten aktualisiert.'
     }
 
-    & $nssm start $ServiceName | Out-Null
+    Invoke-Nssm start $ServiceName | Out-Null
     Start-Sleep -Seconds 2
     Assert-ServiceStarted
     Write-Log 'Update abgeschlossen.'
