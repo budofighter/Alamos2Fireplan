@@ -215,7 +215,15 @@ function Invoke-Update {
         $src = Join-Path $ProjectDir $item
         $dst = Join-Path $target $item
         if (Test-Path -LiteralPath $src -PathType Container) {
-            Copy-Item -LiteralPath $src -Destination $dst -Recurse -Force
+            # Verzeichnisinhalt ins bestehende Ziel spiegeln. Copy-Item -Recurse in ein
+            # existierendes Verzeichnis würde die Quelle hineinschachteln (app -> app\app);
+            # robocopy überschreibt Dateien, verschachtelt nicht und wiederholt bei
+            # kurzzeitig gesperrten Dateien (z. B. gerade gestopptes tools\python).
+            robocopy $src $dst /E /NFL /NDL /NJH /NJS /R:3 /W:2 | Out-Null
+            if ($LASTEXITCODE -ge 8) {
+                throw "Kopieren von '$item' fehlgeschlagen (robocopy Code $LASTEXITCODE)."
+            }
+            $global:LASTEXITCODE = 0
         } else {
             Copy-Item -LiteralPath $src -Destination $dst -Force
         }
