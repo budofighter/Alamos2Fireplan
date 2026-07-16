@@ -188,13 +188,35 @@ function Setup-Mosquitto {
         [System.IO.File]::WriteAllLines((Join-Path $mosqDir 'mosquitto.conf'), $conf, (New-Object System.Text.UTF8Encoding($false)))
         Write-Log 'mosquitto.conf geschrieben.'
 
-        # 5. Dienst sicherstellen + neu starten
-        if (-not (Get-Service -Name 'mosquitto' -ErrorAction SilentlyContinue)) {
-            & $mosqExe install | Out-Null
-        }
-        Restart-Service -Name 'mosquitto' -ErrorAction SilentlyContinue
-        Start-Service -Name 'mosquitto' -ErrorAction SilentlyContinue
-        Write-Log 'Mosquitto-Dienst gestartet.'
+        # 5. Dienst via NSSM registrieren. mosquittos eigener Windows-Dienst-Modus
+        # ('run') laedt die mosquitto.conf nicht zuverlaessig (Arbeitsverzeichnis
+        # System32 -> Broker laeuft, lauscht aber nicht), und 'run -c' bricht das
+        # Dienst-Protokoll (Fehler 1053). NSSM startet stattdessen den bewiesenen
+        # Vordergrund-Befehl 'mosquitto -c <config>' als sauberen Dienst.
+        $a2fNssm  = Join-Path $Dir 'tools\nssm.exe'
+        $mosqNssm = Join-Path $mosqDir 'nssm.exe'
+
+        # Bestehenden mosquitto-Dienst (nativ oder NSSM) entfernen (Steuerbefehle
+        # ueber die A2F-nssm, damit eine evtl. genutzte mosqNssm freigegeben wird).
+        Invoke-Nssm -NssmPath $a2fNssm stop mosquitto | Out-Null
+        Invoke-Nssm -NssmPath $a2fNssm remove mosquitto confirm | Out-Null
+        Start-Sleep -Seconds 2
+
+        # nssm.exe neben mosquitto legen, damit der Broker-Dienst unabhaengig vom
+        # A2F-Ordner ist (der spaeter geloescht werden koennte).
+        Copy-Item -LiteralPath $a2fNssm -Destination $mosqNssm -Force
+
+        # AppDirectory = mosquitto-Ordner, Config RELATIV angeben (-c mosquitto.conf).
+        # Kein voller Pfad mit Leerzeichen/Quotes als Argument -> umgeht das
+        # PowerShell-5.1-Quoting-Problem bei eingebetteten Anfuehrungszeichen.
+        Invoke-Nssm -NssmPath $mosqNssm install mosquitto $mosqExe | Out-Null
+        if ($LASTEXITCODE -ne 0) { throw "nssm install mosquitto schlug fehl (Code $LASTEXITCODE)." }
+        Invoke-Nssm -NssmPath $mosqNssm set mosquitto AppDirectory $mosqDir | Out-Null
+        Invoke-Nssm -NssmPath $mosqNssm set mosquitto AppParameters "-c mosquitto.conf" | Out-Null
+        Invoke-Nssm -NssmPath $mosqNssm set mosquitto Start SERVICE_AUTO_START | Out-Null
+        Invoke-Nssm -NssmPath $mosqNssm set mosquitto DisplayName 'Mosquitto Broker' | Out-Null
+        Invoke-Nssm -NssmPath $mosqNssm start mosquitto | Out-Null
+        Write-Log 'Mosquitto-Dienst (via NSSM) registriert und gestartet.'
 
         # 5b. Wirklich verifizieren, dass der Broker auf 1883 lauscht. Startet
         # mosquitto wegen eines Config-Fehlers nicht, gibt es sonst nur ein stilles
