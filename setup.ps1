@@ -209,31 +209,39 @@ function Setup-Mosquitto {
         # AppDirectory = mosquitto-Ordner, Config RELATIV angeben (-c mosquitto.conf).
         # Kein voller Pfad mit Leerzeichen/Quotes als Argument -> umgeht das
         # PowerShell-5.1-Quoting-Problem bei eingebetteten Anfuehrungszeichen.
+        # mosquitto-Ausgabe (mit -v) in ein Log schreiben, damit ein Startfehler
+        # sichtbar wird statt still zu scheitern.
+        $mosqLog = Join-Path (Split-Path $PwFile -Parent) 'mosquitto-service.log'
         Invoke-Nssm -NssmPath $mosqNssm install mosquitto $mosqExe | Out-Null
         if ($LASTEXITCODE -ne 0) { throw "nssm install mosquitto schlug fehl (Code $LASTEXITCODE)." }
         Invoke-Nssm -NssmPath $mosqNssm set mosquitto AppDirectory $mosqDir | Out-Null
-        Invoke-Nssm -NssmPath $mosqNssm set mosquitto AppParameters "-c mosquitto.conf" | Out-Null
+        Invoke-Nssm -NssmPath $mosqNssm set mosquitto AppParameters "-c mosquitto.conf -v" | Out-Null
+        Invoke-Nssm -NssmPath $mosqNssm set mosquitto AppStdout $mosqLog | Out-Null
+        Invoke-Nssm -NssmPath $mosqNssm set mosquitto AppStderr $mosqLog | Out-Null
         Invoke-Nssm -NssmPath $mosqNssm set mosquitto Start SERVICE_AUTO_START | Out-Null
         Invoke-Nssm -NssmPath $mosqNssm set mosquitto DisplayName 'Mosquitto Broker' | Out-Null
         Invoke-Nssm -NssmPath $mosqNssm start mosquitto | Out-Null
-        Write-Log 'Mosquitto-Dienst (via NSSM) registriert und gestartet.'
+        Write-Log "Mosquitto-Dienst (via NSSM) registriert und gestartet. Broker-Log: $mosqLog"
 
-        # 5b. Wirklich verifizieren, dass der Broker auf 1883 lauscht. Startet
-        # mosquitto wegen eines Config-Fehlers nicht, gibt es sonst nur ein stilles
-        # "Connection refused" spaeter.
-        Start-Sleep -Seconds 2
+        # 5b. Wirklich verifizieren, dass der Broker auf 1883 lauscht (Retry ~6s,
+        # falls der Start etwas dauert). Startet mosquitto wegen eines Fehlers
+        # nicht, gibt es sonst nur ein stilles "Connection refused" spaeter.
         $listening = $false
-        try {
-            $tcp = New-Object System.Net.Sockets.TcpClient
-            $tcp.Connect('127.0.0.1', 1883)
-            $listening = $tcp.Connected
-            $tcp.Close()
-        } catch { $listening = $false }
+        foreach ($try in 1..6) {
+            Start-Sleep -Seconds 1
+            try {
+                $tcp = New-Object System.Net.Sockets.TcpClient
+                $tcp.Connect('127.0.0.1', 1883)
+                $listening = $tcp.Connected
+                $tcp.Close()
+            } catch { $listening = $false }
+            if ($listening) { break }
+        }
         if ($listening) {
             Write-Log 'Mosquitto laeuft und lauscht auf 127.0.0.1:1883.'
         } else {
-            Write-Log 'ACHTUNG: Mosquitto lauscht NICHT auf 1883 - der Dienst ist vermutlich beim Start abgebrochen.' 'WARN'
-            Write-Log 'Diagnose: Admin-Konsole -> cd "C:\Program Files\mosquitto" -> mosquitto -c mosquitto.conf -v   (zeigt die genaue Fehlerursache).' 'WARN'
+            Write-Log 'ACHTUNG: Mosquitto lauscht NICHT auf 1883 - der Broker ist beim Start abgebrochen.' 'WARN'
+            Write-Log "Der genaue Grund steht jetzt im Broker-Log: $mosqLog" 'WARN'
         }
 
         # 6. config/.env im Installationsordner sicherstellen und MQTT-Schluessel synchronisieren
