@@ -6,45 +6,21 @@ Windows-Dienst und bietet eine Weboberfläche zur Verwaltung.
 
 ---
 
-## Version 2.2.7
+## Hinweis zum ersten Update auf Version 2.2.7
 
-Diese Version enthält größere Änderungen an Installation, Sicherheit, Zuverlässigkeit
-und der Mosquitto-Einrichtung. Bei einem Update bleiben Einstellungen und Datenbank
-erhalten.
+**Achtung:** Beim ersten Update von einer Version älter als 2.2.7 werden die Einstellungen
+noch **nicht** automatisch übernommen. Bitte einmalig wie folgt vorgehen:
 
-**Installation.** Python ist jetzt im Paket enthalten, sodass keine separate
-Python-Installation, kein PATH-Eintrag und keine virtuelle Umgebung mehr nötig sind. Ein
-einziges `install.bat` erkennt automatisch, ob eine Erst-Installation oder ein Update
-durchgeführt wird; das Programm wird an den festen Ort `C:\Alamos2Fireplan` installiert.
-Bei einem Update werden `config/`, `alarme.db` und `logs/` zuvor gesichert, und nur der
-Programmcode wird ersetzt – Einstellungen und Datenbank bleiben erhalten. Die
-Deinstallation über `uninstall.bat` fragt, ob auch der Mosquitto-Broker und der
-Installationsordner entfernt werden sollen. Die Versionsnummer wird in der Weboberfläche
-angezeigt.
+1. Im aktuellen Installationsordner den Ordner `config` und die Datei `alarme.db` sichern
+   (an einen anderen Ort kopieren).
+2. Kontrollierte Deinstallation über `uninstall.bat`.
+3. Neuinstallation mit dem neuen Installer (`install.bat`).
+4. Den Dienst `Alamos2Fireplan` über die Windows-Dienste (`services.msc`) stoppen.
+5. Die gesicherten `config` und `alarme.db` nach `C:\Alamos2Fireplan` kopieren und die dort
+   vorhandenen Dateien überschreiben.
+6. Den Dienst `Alamos2Fireplan` wieder starten.
 
-**Sicherheit.** Sämtliche Seiten und API-Endpunkte erfordern jetzt eine Anmeldung; zuvor
-waren unter anderem `/api/logs` und `/mqtt/stop` ohne Login erreichbar. Der
-Session-Schlüssel wird dauerhaft in der `.env` gespeichert, sodass Anmeldungen einen
-Neustart des Dienstes überstehen.
-
-**Zuverlässigkeit.** Die Weboberfläche wird über den Produktionsserver waitress
-ausgeliefert statt über den Flask-Entwicklungsserver. Der Datenbankzugriff ist
-thread-sicher (WAL-Modus und Sperren). Ein abgelaufenes Fireplan-Token wird bei den
-Statuscodes 401/403 automatisch neu angefordert. Die MQTT-Statusanzeige zeigt die
-tatsächliche Verbindung zum Broker an. Außerdem wurde paho-mqtt auf die
-Callback-API-Version 1 festgelegt und ein Fallback für einen fehlenden `MQTT_PORT`
-ergänzt.
-
-**Mosquitto.** Der lokale Broker kann während der Installation vollautomatisch
-eingerichtet werden (Download, Installation, Benutzer, Konfiguration, Dienst und Firewall)
-einschließlich Ausgabe der Zugangsdaten für Alamos. `mosquitto.conf` und `.env` werden
-ohne BOM geschrieben. Der Broker-Dienst wird über NSSM registriert, da der native
-Mosquitto-Dienst die Konfiguration unter Windows nicht zuverlässig lädt. Die Passwortdatei
-erhält Leserecht für das Dienstkonto (LocalSystem).
-
-**Performance.** Für die Alarmverarbeitung wurden Indizes auf `alarme(external_id)` und
-`fahrzeuglog(timestamp)` angelegt. Der Fireplan-Payload wird pro Alarm nur noch einmal
-erzeugt.
+Zukünftige Updates übernehmen die Einstellungen automatisch.
 
 ---
 
