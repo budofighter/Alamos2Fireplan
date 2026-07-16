@@ -123,3 +123,10 @@ class MQTTHandler:
         self.client.loop_stop()
         self.client.disconnect()
         logger.info("[MQTT] Verbindung beendet.")
+
+    def is_connected(self):
+        # Echte, aktuelle Verbindung zum Broker (nicht nur "wurde gestartet").
+        try:
+            return bool(self.client.is_connected())
+        except Exception:
+            return False

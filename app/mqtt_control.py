@@ -2,21 +2,25 @@
 from backend.mqtt_handler import MQTTHandler
 import os
 from dotenv import load_dotenv
-from backend.fireplan_api import Fireplan
-from backend.db_handler import DBHandler
 
 load_dotenv(dotenv_path=os.path.join("config", ".env"))
 
 mqtt_handler = None
-is_running = False
 
 def start_mqtt():
-    global mqtt_handler, is_running
-    if is_running:
+    global mqtt_handler
+
+    # Schon aktiv verbunden? Nichts tun.
+    if mqtt_handler is not None and mqtt_handler.is_connected():
         return False
 
-    db = DBHandler()
-    fp = Fireplan()
+    # Alten (nicht verbundenen) Handler sauber stoppen, bevor neu verbunden wird.
+    if mqtt_handler is not None:
+        try:
+            mqtt_handler.stop()
+        except Exception:
+            pass
+        mqtt_handler = None
 
     def handle_alarm(data):
         from backend.main import handle_alarm as main_handle_alarm
@@ -44,16 +48,16 @@ def start_mqtt():
         on_reconnect=lambda: None
     )
     mqtt_handler.start()
-    is_running = True
     return True
 
 def stop_mqtt():
-    global mqtt_handler, is_running
+    global mqtt_handler
     if mqtt_handler:
         mqtt_handler.stop()
         mqtt_handler = None
-    is_running = False
     return True
 
 def get_status():
-    return is_running
+    # Spiegelt die ECHTE Broker-Verbindung wider (nicht nur "wurde gestartet"),
+    # damit die Anzeige nicht faelschlich gruen bleibt, wenn MQTT abgebrochen ist.
+    return mqtt_handler is not None and mqtt_handler.is_connected()
