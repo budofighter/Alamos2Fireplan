@@ -86,10 +86,10 @@ Alamos2Fireplan/
 
 | Thema | Link |
 | --- | --- |
-| Mosquitto MQTT-Broker | [Mosquitto MQTT-Broker – Installation & Konfiguration](https://github.com/budofighter/Alamos2Fireplan/wiki/1.-Mosquitto-MQTT%E2%80%90Broker-%E2%80%93-Installation-&-Konfiguration-(Windows)) |
-| Installationsanleitung | [Installationsanleitung Alamos2Fireplan](https://github.com/budofighter/Alamos2Fireplan/wiki/2.-Installationsanleitung-Alamos2Fireplan) |
-| Konfiguration der Systeme | [Konfiguration Alamos, Fireplan, Feuersoftware](https://github.com/budofighter/Alamos2Fireplan/wiki/3.-Konfiguration) |
-| Grundeinstellung Alamos2Fireplan | [Einstellungen Alamos2Fireplan](https://github.com/budofighter/Alamos2Fireplan/wiki/4.-Einstellungen-Alamos2Fireplan) |
+| Mosquitto MQTT-Broker | [Mosquitto MQTT-Broker – Installation & Konfiguration](https://github.com/budofighter/Alamos2Fireplan/wiki/Mosquitto-MQTT%E2%80%90Broker-%E2%80%93-Installation-&-Konfiguration-(Windows)) |
+| Installationsanleitung | [Installationsanleitung Alamos2Fireplan](https://github.com/budofighter/Alamos2Fireplan/wiki/Installationsanleitung-Alamos2Fireplan) |
+| Konfiguration der Systeme | [Konfiguration Alamos, Fireplan, Feuersoftware](https://github.com/budofighter/Alamos2Fireplan/wiki/Konfiguration-Alamos,-Fireplan,-Feuersoftware) |
+| Grundeinstellung Alamos2Fireplan | [Einstellungen Alamos2Fireplan](https://github.com/budofighter/Alamos2Fireplan/wiki/Einstellungen-Alamos2Fireplan) |
 
 ---
 
