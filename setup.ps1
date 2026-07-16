@@ -175,7 +175,15 @@ function Setup-Mosquitto {
         if (-not (Test-Path -LiteralPath $pwDir)) { New-Item -ItemType Directory -Path $pwDir -Force | Out-Null }
         & $mosqPw -b -c $PwFile $user $pass
         if ($LASTEXITCODE -ne 0) { throw "mosquitto_passwd schlug fehl (Code $LASTEXITCODE)." }
-        Write-Log "MQTT-Benutzer '$user' angelegt."
+        # WICHTIG: mosquitto_passwd legt die Datei mit den Rechten des ausfuehrenden
+        # (Admin-)Benutzers an. Der mosquitto-Dienst laeuft aber als LocalSystem und
+        # koennte die pwfile sonst nicht lesen ("Unable to open pwfile") -> Broker
+        # startet nicht. Daher LocalSystem (SID S-1-5-18) Leserecht geben.
+        $acl = Get-Acl -LiteralPath $PwFile
+        $sysSid = New-Object System.Security.Principal.SecurityIdentifier('S-1-5-18')
+        $acl.AddAccessRule((New-Object System.Security.AccessControl.FileSystemAccessRule($sysSid, 'Read', 'Allow')))
+        Set-Acl -LiteralPath $PwFile -AclObject $acl
+        Write-Log "MQTT-Benutzer '$user' angelegt (Leserecht fuer Dienst-Konto gesetzt)."
 
         # 4. mosquitto.conf schreiben
         $conf = @(
