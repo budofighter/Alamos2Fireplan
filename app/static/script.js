@@ -1,11 +1,23 @@
+// Werte aus MQTT-Nachrichten/Logs stammen von aussen -> vor dem Einfuegen in
+// innerHTML immer escapen (sonst HTML/Script-Injection ueber Alarmtexte).
+function escapeHtml(value) {
+    if (value === null || value === undefined) return "";
+    return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+}
+
 async function updateAlarms() {
-    if (!window.location.pathname.startsWith("/alarms")) return;
+    // Seite erkennt sich an der Tabelle (die Alarmliste liegt unter "/").
+    const tbody = document.getElementById("alarm-table");
+    if (!tbody) return;
 
     try {
         const response = await fetch("/api/alarms");
         const data = await response.json();
-        const tbody = document.getElementById("alarm-table");
-        if (!tbody) return;
 
         if (data.alarms.length === 0) {
             tbody.innerHTML = `<tr><td colspan="6" class="text-center">Keine Alarme vorhanden.</td></tr>`;
@@ -14,13 +26,13 @@ async function updateAlarms() {
 
         tbody.innerHTML = data.alarms.map(alarm => `
             <tr>
-                <td>${formatDate(alarm.timestamp)}</td>
-                <td>${alarm.keyword}</td>
-                <td>${alarm.city}</td>
-                <td>${alarm.street}</td>
-                <td>${alarm.house}</td>
+                <td>${escapeHtml(formatDate(alarm.timestamp))}</td>
+                <td>${escapeHtml(alarm.keyword)}</td>
+                <td>${escapeHtml(alarm.city)}</td>
+                <td>${escapeHtml(alarm.street)}</td>
+                <td>${escapeHtml(alarm.house)}</td>
                 <td>
-                    <a href="/alarm/${alarm.id}" class="btn btn-sm btn-primary">Details</a>
+                    <a href="/alarm/${encodeURIComponent(alarm.id)}" class="btn btn-sm btn-primary">Details</a>
                 </td>
             </tr>
         `).join("");
@@ -33,6 +45,7 @@ async function updateAlarms() {
 
 function formatDate(isoString) {
     const dt = new Date(isoString);
+    if (isNaN(dt.getTime())) return isoString || "";
     return dt.toLocaleString("de-DE", {
         day: "2-digit",
         month: "2-digit",
@@ -66,13 +79,12 @@ async function updateMqttButton() {
 }
 
 async function updateStatus() {
-    if (!window.location.pathname.startsWith("/status")) return;
+    const tbody = document.getElementById("status-table");
+    if (!tbody) return;
 
     try {
         const response = await fetch("/api/status");
         const data = await response.json();
-        const tbody = document.getElementById("status-table");
-        if (!tbody) return;
 
         if (data.statuses.length === 0) {
             tbody.innerHTML = `<tr><td colspan="3" class="text-center">Keine Einträge vorhanden.</td></tr>`;
@@ -109,9 +121,9 @@ async function updateStatus() {
 
             return `
                 <tr>
-                    <td>${formatDate(row.timestamp)}</td>
-                    <td>${row.fahrzeug}</td>
-                    <td><span class="badge ${badgeClass}">${badgeText}</span></td>
+                    <td>${escapeHtml(formatDate(row.timestamp))}</td>
+                    <td>${escapeHtml(row.fahrzeug)}</td>
+                    <td><span class="badge ${badgeClass}">${escapeHtml(badgeText)}</span></td>
                 </tr>
             `;
         }).join("");
@@ -124,14 +136,12 @@ async function updateStatus() {
 
 
 async function loadLogs() {
-    if (!window.location.pathname.startsWith("/logs")) return;
+    const container = document.getElementById("log-container");
+    if (!container) return;
 
     try {
         const response = await fetch("/api/logs");
         const data = await response.text();
-
-        const container = document.getElementById("log-container");
-        if (!container) return;
 
         const lines = data.split("\n").filter(line => line.trim() !== "");
 
@@ -143,7 +153,7 @@ async function loadLogs() {
             else if (line.includes("INFO")) cssClass = "log-info";
             else if (line.includes("CRITICAL")) cssClass = "log-critical";
 
-            return `<div class="${cssClass}">${line}</div>`;
+            return `<div class="${cssClass}">${escapeHtml(line)}</div>`;
         }).join("");
         container.scrollTop = 0; // neueste Einträge oben sichtbar
 

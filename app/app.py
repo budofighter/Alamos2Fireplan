@@ -7,12 +7,17 @@ import logging
 from functools import wraps
 from dotenv import load_dotenv, set_key
 from backend.db_handler import DBHandler
-from backend.main import handle_alarm
+from backend.main import handle_alarm, reload_runtime_config
 from backend.log_helper import logger, LOG_PATH
 from datetime import datetime
 from werkzeug.security import generate_password_hash, check_password_hash
 from backend.version import APP_VERSION
 import secrets
+from collections import deque
+
+# Wie viele Zeilen die Log-Ansicht maximal zeigt. Die Logdatei kann bis zu
+# 10 MB gross werden - sie wird daher nie komplett in den Speicher geladen.
+LOG_VIEW_LINES = 1000
 
 app = Flask(__name__)
 db = DBHandler()
@@ -121,16 +126,18 @@ def api_alarms():
     alarms = db.query_all("SELECT id, timestamp, keyword, city, street, house FROM alarme ORDER BY id DESC LIMIT 100")
     return {"alarms": [dict(row) for row in alarms]}
 
+def _tail_log(max_lines=LOG_VIEW_LINES):
+    """Liefert die letzten max_lines Zeilen der Logdatei (neueste zuletzt)."""
+    if not os.path.exists(LOG_PATH):
+        return None
+    with open(LOG_PATH, "r", encoding="utf-8", errors="replace") as f:
+        return list(deque(f, maxlen=max_lines))
+
 @app.route("/logs")
 @login_required
 def logs_page():
-    if os.path.exists(LOG_PATH):
-        with open(LOG_PATH, "r", encoding="utf-8") as f:
-            log_content = f.read()
-    else:
-        log_content = "Keine Logdatei gefunden."
     current_level = os.getenv("LOG_LEVEL", "INFO").upper()
-    return render_template("logs.html", log_content=log_content, current_level=current_level)
+    return render_template("logs.html", current_level=current_level)
 
 @app.route("/clear_logs", methods=["POST"])
 @login_required
@@ -141,12 +148,11 @@ def clear_logs():
 @app.route("/api/logs")
 @login_required
 def api_logs():
-    if os.path.exists(LOG_PATH):
-        with open(LOG_PATH, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-        lines.reverse()
-        return "".join(lines)
-    return "Keine Logdatei gefunden."
+    lines = _tail_log()
+    if lines is None:
+        return "Keine Logdatei gefunden."
+    lines.reverse()
+    return "".join(lines), 200, {"Content-Type": "text/plain; charset=utf-8"}
 
 @app.route("/set_log_level", methods=["POST"])
 @login_required
@@ -222,6 +228,18 @@ def save_settings():
         flash("Admin-Passwort aktualisiert", "success")
     else:
         flash("Einstellungen gespeichert", "success")
+
+    # Neue Einstellungen sofort wirksam machen (ohne Dienst-Neustart):
+    # Fireplan neu registrieren und MQTT mit den neuen Zugangsdaten verbinden.
+    try:
+        reload_runtime_config()
+    except Exception as e:
+        logger.error(f"Neuladen der Konfiguration fehlgeschlagen: {e}")
+    try:
+        stop_mqtt()
+        start_mqtt()
+    except Exception as e:
+        logger.error(f"MQTT-Neustart nach Speichern fehlgeschlagen: {e}")
     return redirect(url_for("settings"))
 
 @app.route("/tokens")
@@ -322,7 +340,7 @@ try:
     if not get_status():
         start_mqtt()
 except Exception as e:
-    print(f"Fehler beim Starten von MQTT: {e}")
+    logger.error(f"Fehler beim Starten von MQTT: {e}")
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
