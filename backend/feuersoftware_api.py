@@ -3,9 +3,9 @@ import requests
 import json
 from datetime import datetime
 from backend.log_helper import logger
-from dotenv import load_dotenv
 
 FS_TOKEN_PATH = os.path.join("config", "fs_api_tokens.json")
+HTTP_TIMEOUT = (5, 20)  # (Verbindungsaufbau, Antwort) in Sekunden
 
 def load_feuersoftware_tokens(path=FS_TOKEN_PATH):
     if not os.path.exists(path):
@@ -36,7 +36,7 @@ def post_fahrzeug_status(radioid, status):
     data = {"status": status}
 
     try:
-        response = requests.post(url, data=json.dumps(data), headers=headers)
+        response = requests.post(url, data=json.dumps(data), headers=headers, timeout=HTTP_TIMEOUT)
         if response.status_code in (200, 204):
             logger.info(f"[Feuersoftware] Fahrzeugstatus erfolgreich gesendet: {radioid} → {status}")
         else:
@@ -103,11 +103,18 @@ def post_feuersoftware_alarm(data: dict):
                 "content-type": "application/json",
             }
 
-            response = requests.post(
-                "https://connectapi.feuersoftware.com/interfaces/public/operation",
-                data=json.dumps(payload),
-                headers=headers
-            )
+            # Jeder Empfaenger einzeln abgesichert: ein nicht erreichbarer
+            # Empfaenger darf die uebrigen Tokens nicht blockieren.
+            try:
+                response = requests.post(
+                    "https://connectapi.feuersoftware.com/interfaces/public/operation",
+                    data=json.dumps(payload),
+                    headers=headers,
+                    timeout=HTTP_TIMEOUT,
+                )
+            except requests.RequestException as e:
+                logger.error(f"[Feuersoftware] Alarm an Token {token[:6]}... nicht zustellbar: {e}")
+                continue
 
             if response.status_code in (200, 204):
                 logger.info(f"[Feuersoftware] Alarm erfolgreich gesendet (Token gekürzt: {token[:6]}...).")

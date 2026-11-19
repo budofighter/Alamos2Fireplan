@@ -1,11 +1,16 @@
+import os
 import requests
 import cerberus
 import json
 import pytz
 from datetime import datetime
 from urllib.parse import quote
-from config import FIREPLAN_SECRET, FIREPLAN_DIVISION
+import config  # noqa: F401  (legt config/.env an und laedt sie)
 from backend.log_helper import logger  # zentraler Logger
+
+# (Verbindungsaufbau, Antwort) in Sekunden. Ohne Timeout kann ein haengender
+# Fireplan-Server den MQTT-Verarbeitungs-Thread unbegrenzt blockieren.
+HTTP_TIMEOUT = (5, 20)
 
 # Schema Definition
 ALARM_SCHEMA = {
@@ -27,9 +32,11 @@ class Fireplan:
     BASE_URL = "https://data.fireplan.de/api/"
 
     def __init__(self, secret=None, division=None):
-        self._secret = secret or FIREPLAN_SECRET
-        self._division = division or FIREPLAN_DIVISION
-        logger.debug(f"Initialisierung mit Registration ID {self._secret} und Abteilung {self._division}")
+        # Werte zur Laufzeit aus der Umgebung lesen (nicht beim Import einfrieren),
+        # damit geaenderte Einstellungen nach reload_runtime_config() greifen.
+        self._secret = secret or os.getenv("FIREPLAN_SECRET") or ""
+        self._division = division or os.getenv("FIREPLAN_DIVISION") or ""
+        logger.debug(f"[Fireplan] Initialisierung fuer Abteilung {self._division}")
         self.headers = {
             "accept": "application/json",
             "content-type": "application/json",
@@ -38,6 +45,9 @@ class Fireplan:
         self.validator = cerberus.Validator(ALARM_SCHEMA, purge_unknown=True)
 
     def _get_token(self, secret):
+        if not secret or not self._division:
+            logger.warning("[Fireplan] FIREPLAN_SECRET/FIREPLAN_DIVISION nicht gesetzt - keine Registrierung.")
+            return
         encoded_division = quote(self._division)  # z. B. „Bad Säckingen“ → „Bad%20S%C3%A4ckingen“
         url = f"{self.BASE_URL}Register/{encoded_division}"
         headers = {
@@ -47,10 +57,10 @@ class Fireplan:
 
         try:
             logger.debug(f"[Fireplan] Token-Anfrage an: {url}")
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=headers, timeout=HTTP_TIMEOUT)
 
             logger.debug(f"[Fireplan] Antwortcode: {response.status_code}")
-            logger.debug(f"[Fireplan] Antworttext: {response.text}")
+            logger.debug(f"[Fireplan] Antworttext: {response.text[:500]}")
 
             if response.status_code == 200:
                 response_json = response.json()
@@ -69,8 +79,19 @@ class Fireplan:
             logger.error(f"[Fireplan] Fehler beim Abrufen des Tokens: {e}")
 
 
+    def _ensure_token(self):
+        # War die Registrierung beim Start nicht moeglich (z. B. kein Internet
+        # beim Booten), hier erneut versuchen statt dauerhaft ohne Token zu laufen.
+        if not self.headers.get("API-Token"):
+            logger.info("[Fireplan] Kein API-Token vorhanden - versuche erneute Registrierung.")
+            self._get_token(self._secret)
+        return bool(self.headers.get("API-Token"))
+
     def alarm(self, data):
         url = f"{self.BASE_URL}Alarmierung"
+        if not self._ensure_token():
+            logger.error("[Fireplan] Alarm nicht gesendet - keine gueltige Registrierung (API-Key/Abteilung pruefen).")
+            return
         headers = self.headers
 
         data["koordinaten"] = self._format_coordinates(data.get("koordinaten"))
@@ -90,13 +111,13 @@ class Fireplan:
 
         try:
             logger.debug(f"[Fireplan] Sende Alarmdaten an Fireplan:\n{json.dumps(valid, indent=2, ensure_ascii=False)}")
-            response = requests.post(url, headers=headers, json=valid)
+            response = requests.post(url, headers=headers, json=valid, timeout=HTTP_TIMEOUT)
 
             # Token abgelaufen/ungueltig -> einmal neu registrieren und wiederholen
             if response.status_code in (401, 403):
                 logger.warning(f"[Fireplan] Auth fehlgeschlagen (Code {response.status_code}) - hole neues Token und wiederhole.")
                 self._get_token(self._secret)
-                response = requests.post(url, headers=self.headers, json=valid)
+                response = requests.post(url, headers=self.headers, json=valid, timeout=HTTP_TIMEOUT)
 
             if response.status_code == 200:
                 logger.info("✅ Alarm erfolgreich an Fireplan übermittelt.")
@@ -116,7 +137,7 @@ class Fireplan:
         url = f"{self.BASE_URL}FMSStatus"
         headers = self.headers
 
-        if 'API-Token' not in self.headers or not self.headers['API-Token']:
+        if not self._ensure_token():
             logger.error("[Fireplan] Kein API-Token vorhanden – Registrierung war nicht erfolgreich.")
             return
 
@@ -135,14 +156,13 @@ class Fireplan:
                 "statusTime": status_time
             }
 
-            logger.debug(f"[Fireplan] Header bei FMS-Status: {headers}")
-            response = requests.post(url, headers=headers, json=payload)
+            response = requests.post(url, headers=headers, json=payload, timeout=HTTP_TIMEOUT)
 
             # Token abgelaufen/ungueltig -> einmal neu registrieren und wiederholen
             if response.status_code in (401, 403):
                 logger.warning(f"[Fireplan] Auth fehlgeschlagen (Code {response.status_code}) - hole neues Token und wiederhole.")
                 self._get_token(self._secret)
-                response = requests.post(url, headers=self.headers, json=payload)
+                response = requests.post(url, headers=self.headers, json=payload, timeout=HTTP_TIMEOUT)
 
             if response.status_code == 200:
                 logger.info(f"[Fireplan] FMS-Status gesendet: {kennung} → {status} ({status_time})")

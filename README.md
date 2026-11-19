@@ -6,21 +6,24 @@ Windows-Dienst und bietet eine Weboberfläche zur Verwaltung.
 
 ---
 
-## Hinweis zum ersten Update auf Version 2.2.7
+## Neu in Version 2.3.0
 
-**Achtung:** Beim ersten Update von einer Version älter als 2.2.7 werden die Einstellungen
-noch **nicht** automatisch übernommen. Bitte einmalig wie folgt vorgehen:
-
-1. Im aktuellen Installationsordner den Ordner `config` und die Datei `alarme.db` sichern
-   (an einen anderen Ort kopieren).
-2. Kontrollierte Deinstallation über `uninstall.bat`.
-3. Neuinstallation mit dem neuen Installer (`install.bat`).
-4. Den Dienst `Alamos2Fireplan` über die Windows-Dienste (`services.msc`) stoppen.
-5. Die gesicherten `config` und `alarme.db` nach `C:\Alamos2Fireplan` kopieren und die dort
-   vorhandenen Dateien überschreiben.
-6. Den Dienst `Alamos2Fireplan` wieder starten.
-
-Zukünftige Updates übernehmen die Einstellungen automatisch.
+* **Update aus jeder Altversion** (auch 2.0.x mit `venv`): einfach `install.bat` aus dem
+  neuen Paket starten. Einstellungen (`config/.env`, RIC-Zuordnung, Feuersoftware-Tokens)
+  und die Datenbank (`alarme.db`) bleiben erhalten – der frühere manuelle Umweg über
+  Deinstallation/Neuinstallation ist **nicht mehr nötig**.
+* **Sicheres Update mit automatischem Zurückrollen:** Startet die neue Version nicht,
+  wird die vorherige Version automatisch wiederhergestellt.
+* **Echte Erfolgsprüfung:** Installation/Update gelten erst als erfolgreich, wenn die
+  Weboberfläche tatsächlich antwortet.
+* **MQTT stabiler:** automatisches Wiederverbinden (auch wenn der Broker beim Systemstart
+  später startet), persistente Sitzung mit QoS 1 (Alarme während eines Neustarts werden
+  vom Broker nachgeliefert), Verarbeitung blockiert die Verbindung nicht mehr.
+* **Timeouts** für alle Aufrufe an Fireplan, Feuersoftware und externe API.
+* Einstellungen wirken **sofort nach dem Speichern** (kein Dienst-Neustart nötig).
+* Weboberfläche funktioniert **ohne Internet** (Bootstrap lokal eingebunden).
+* Aktualisierte Komponenten: Python 3.14, Flask 3.1.3, paho-mqtt 2.2, requests 2.34,
+  Mosquitto 2.1.4 (Installer im Paket enthalten, Installation ohne Internet möglich).
 
 ---
 
@@ -52,22 +55,32 @@ Zukünftige Updates übernehmen die Einstellungen automatisch.
 
 ## Installation & Update
 
-**Immer `install.bat`** – das Skript erkennt selbst, ob eine Erst-Installation oder ein
-Update nötig ist. Es wird stets aus dem **entpackten Release-Ordner** gestartet (nicht aus
-`C:\Alamos2Fireplan`).
+**Immer `install.bat`** – das Skript erkennt selbst, was zu tun ist. Es wird stets aus dem
+**entpackten Release-Ordner** gestartet (ZIP vorher entpacken, nicht direkt aus dem ZIP
+starten).
 
 * **Erst-Installation:** Dateien werden nach `C:\Alamos2Fireplan` kopiert, der Dienst wird
   registriert und gestartet. Optional wird ein lokaler Mosquitto-Broker eingerichtet.
-* **Update (Dienst existiert):** Der Dienst wird gestoppt, `config/`, `alarme.db` und
-  `logs/` werden vorher gesichert (`backups/`), nur der Code wird ersetzt – **Einstellungen
-  und Datenbank bleiben erhalten** – dann startet der Dienst neu.
+* **Update (bestehende Installation, jede Version ab 2.0.x):**
+  1. Dienst wird gestoppt (es wird gewartet, bis er wirklich steht).
+  2. `config/` und `alarme.db` werden nach `backups/backup_<Datum>/data` gesichert.
+  3. Der alte Programmcode wird nach `backups/backup_<Datum>/code` **verschoben** (nicht
+     gelöscht), Altlasten wie `venv/` gleich mit.
+  4. Neuer Code wird eingespielt, der Dienst neu registriert und gestartet.
+  5. Antwortet die Weboberfläche nicht, wird automatisch die alte Version wiederhergestellt.
+
+  **Einstellungen und Datenbank werden nie überschrieben.** Es bleiben die letzten 5 Backups
+  erhalten.
+* **Reparatur:** Wurde das Paket direkt in den Installationsordner entpackt, richtet
+  `install.bat` den Dienst neu ein und prüft ihn.
 
 **Update-Ablauf:** neue Version herunterladen, entpacken, `install.bat` aus dem
 entpackten Ordner starten. Fertig.
 
 **Deinstallation:** `uninstall.bat` doppelklicken. Es fragt, ob zusätzlich der
-Mosquitto-Broker deinstalliert und ob der Installationsordner (inkl. Config, Datenbank,
-Backups) komplett gelöscht werden soll.
+Mosquitto-Broker deinstalliert und ob der Installationsordner komplett gelöscht werden
+soll. Vor dem Löschen wird angeboten, Einstellungen und Datenbank nach
+`C:\Alamos2Fireplan-Datensicherung_<Datum>` zu sichern.
 
 ---
 
@@ -79,8 +92,10 @@ Alamos2Fireplan/
 ├── backend/            # Logik: MQTT, DB, Fireplan/Feuersoftware/externe API, version.py
 ├── config/             # Konfiguration (.env, config.py, ric_map.json, fs_api_tokens.json)
 ├── tools/
-│   ├── python/         # Gebündeltes Embeddable Python (inkl. Abhängigkeiten)
+│   ├── python/         # Gebündeltes Embeddable Python 3.14 (inkl. Abhängigkeiten)
+│   ├── mosquitto/      # Mosquitto-Installer (für Installation ohne Internet)
 │   └── nssm.exe        # Windows-Dienst-Tool
+├── backups/            # automatische Sicherungen vor jedem Update
 ├── logs/               # app.log, service.log, setup.log
 ├── install.bat         # Installation UND Update (auto-erkannt)
 ├── uninstall.bat       # Dienst/Broker/Ordner entfernen
@@ -132,6 +147,10 @@ Alamos2Fireplan/
   Get-Service -Name Alamos2Fireplan
   ```
 * **MQTT-Status** in der Weboberfläche oben rechts (grün = wirklich verbunden).
+* **Update fehlgeschlagen?** Die vorherige Version wird automatisch wiederhergestellt.
+  Das Protokoll steht in `logs/setup.log`, Sicherungen unter `backups/`.
+* **Port 5000 belegt?** In `config/.env` `WEB_PORT=<anderer Port>` eintragen und den Dienst
+  neu starten.
 * **Datenbank:** `alarme.db` im Installationsordner.
 
 ---
